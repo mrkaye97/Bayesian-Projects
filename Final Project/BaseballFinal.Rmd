@@ -1,0 +1,378 @@
+---
+title: "Final Project"
+author: "Pedro Girardi, Matt Kaye, and Ben Schwartz"
+date: "11/19/2018"
+header-includes:
+   - \setlength\parindent{24pt}
+   - \usepackage{setspace}
+   - \setstretch{1.5}
+   - \usepackage{indentfirst}
+output:
+    pdf_document
+geometry: "left=1in,right=1in,top=1in,bottom=1in"
+fontsize: 11pt
+mainfont: cmtt
+sansfont: cmtt
+monofont: cmtt
+abstract: "For the last two decades, Sabermetricians have been working to accurately represent player performance to provide front offices with data to be used to value a player's contribution to their team. As a result, Wins Above Replacement (WAR) has emerged as leading metric for player performance. In this study, we take a Bayesian approach to evaluating the calibration of WAR with MLB data post-1950. Hamiltonian Monte Carlo is used to fit two predictive models, one using WAR and the other using vanilla count statistics. \\par \\vspace{1cm} \\noindent \\textbf{Keywords:} Sabermetrics, Bayesian Methods, Markov Chain Monte Carlo, Poisson Regression"
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE)
+rm(list = ls())
+library(tidyverse)
+library(ggplot2)
+library(rethinking)
+library(data.table)
+library(bayesplot)
+library(gdata)
+library(ggpubr)
+library(knitr)
+set.seed(8675309)
+```
+
+```{r data_clean, eval = FALSE}
+p_age <- fread("raw_data/pitchers_long.csv", na.strings = "") %>%
+  filter(Team != "- - -") %>%
+  select(1, 3:4)
+
+age <- fread("raw_data/hitters_long.csv", na.strings = "") %>%
+  filter(Team != "- - -") %>%
+  select(1, 3:4) %>%
+  rbind(p_age) %>%
+  group_by(Season, Team) %>%
+  summarise(Age = median(Age))
+
+
+
+hitters <- fread("raw_data/hitters_long.csv", na.strings = "") %>%
+  filter(Team != "- - -") %>%
+  group_by(Season, Team) %>%
+  summarise_at(colnames(.)[-c(1:4, 19)],sum) %>%
+  rename("G_h" = 3, "BB_h" = 13, "K_h" = 14, "HR_h" = 10, "hWAR" = 16)
+
+
+pitchers <- fread("raw_data/pitchers_long.csv", na.strings = "") %>%
+  filter(Team != "- - -") %>%
+  group_by(Season, Team) %>%
+  summarise_at(colnames(.)[-c(1:4, 17)],sum) %>%
+  rename("G_p" = 5, "BB_p" = 12, "K_p" = 13, "HR_p" = 11, "pWAR" = 14)
+
+wins <- fread("raw_data/clean_win_totals.csv") %>%
+  select(1, 3:32) %>%
+  gather(Team, Wins, -Year) %>%
+  rename("Season" = 1)
+  
+df <- pitchers  %>%
+  left_join(hitters, by = c("Season", "Team")) %>%
+  left_join(age, by = c("Season", "Team")) %>%
+  mutate(WAR = hWAR + pWAR) %>%
+  left_join(wins, by = c("Season", "Team")) %>%
+  na.omit()
+
+keep(df, sure = TRUE)
+write.csv(df, "data.csv", row.names = FALSE)
+```
+
+```{r load_data}
+load("stan_fits_update.Rdata")
+df <- fread("data.csv") %>%
+  data.frame() %>%
+  mutate(TB = X1B + 2*X2B + 3*X3B + 4*HR_h) %>%
+  select(1:2, 31, 10:14, 19:23, 25:30, 32)
+
+df_scaled <- df %>%
+  mutate_at(vars(4:20), funs((. - mean(.))/sd(.)))
+```
+
+\newpage
+
+##INTRODUCTION
+Wins Above Replacement (WAR) is a statistic that has recently emerged as the best all-in-one assessment of player performance in Major League Baseball (MLB). WAR attempts to quantify the number of wins a player provides their team compared to a readily available substitute player (generally thought of as a AAA player who could be called up). This idea that a single statistic can show the value a player contributes to his team raises the question on whether or not WAR more accurately predicts wins than a combination of other individual statistics such as hits, runs batted in (RBI), total bases, stolen bases, strikeouts, and walks can. As an extension, we will look at models using WAR versus individual count statistics to predict team wins, examining whether or not one model is better for predicting the amount of wins in a given year given values for each statistic at the team level.
+
+WAR only recently has been considered in the baseball community, and the MLB does not recognize it as an official statistic. However, there have still been studies trying to relate WAR to team wins because the baseball community broadly uses WAR as its main evaluative statistic. In a 2009 blog post from David Cameron, it was found that in the 2009 season, the correlation between a team’s wins and WAR was $.83$. More recently, Glenn DuPaul had a blog post on \textit{The Hardball Times} examining WAR's ability to be used as a predictive statistic for wins. He found that the correlation coefficients for in-season wins related to aggregate team WAR was $.91$. However, when DuPaul attempted to predict wins in a future season using WAR, he discovered that the correlation between WAR and wins was only $.59$. In his test, he only used thirty teams' statistics, randomly sampled from the 2007-2011 seasons. In our project, we will attempt to fit a model using data from the 1950-2018 seasons.
+
+To look at the question of using WAR versus individual statistics to predict team wins, we will want to examine the question how well WAR is calibrated for in-season performance. To do this, we will be fitting models with data from the 1950 through current seasons with both WAR and count statistics.
+
+## LITERATURE REVIEW AND INSTITUTIONAL DETAILS
+
+In 1974, Gerald Scully published a paper on player compensation in Major League Baseball that has become foundational in sports economics. He argued that player salaries are a function of player performance, and that player performance is a function slugging percentage (SLG) for hitters and strikeout-to-walk ratio (K/BB) for pitchers. His use of SLG and K/BB were one of the first uses of what has become known as Sabermetrics: the practice of using advanced statistics to measure player performance. Scully's paper was followed up by Anthony Krautmann in 1999, who substituted earned run average (ERA) for K/BB, and added a second model that used total bases (TB) in place of SLG. Fast forward to today, and Sabermetrics has exploded. In 2018's MLB, every team has an analytics department whose primary goal is to determine how much money a player should be paid. In doing this, they must do as Scully and Krautmann did and attempt to evaluate player performance in order to put a dollar value on a player that they may sign. 
+
+Nowadays, front offices do not use SLG, K/BB, ERA, or TB to evaluate players. Rather, they use WAR or other advanced metrics, which have become the gold-standard evaluative statistics in the MLB. The benefit of WAR in particular, per Fangraphs, is that it is a context-, league-, and park-neutral statistic. This means that we can compare WAR across players, teams, and eras, which allows us to not only evaluate player performance for someone on one team in one year, but to compare that player to a player for a team that no longer exists from fifty years ago, for example.
+
+This raises the question of whether or not WAR has been successful, and, especially, how well does WAR actually predict performance? In other words, how well does a team's total WAR in a certain year predict how well they did that year? If WAR is as well-calibrated as the Sabermetrics community seems to think it is, then it should be almost perfectly correlated with wins, and will certainly outperform other statistics like those that Scully and Krautmann used in their models of player and team performance years ago.
+
+
+## DATA
+
+There are a few baseball databases that have free and easily downloadable statistics. All of the statistics that we used as the explanatory variables in the model came from Fangraphs. Fangraphs has data at the player level, so we used Dplyr to aggregate all of the player-level data up to team-level data by summing the counts of all of our variables grouped by team and year. This left us with 1,630 team-year pairs (i.e. observations in our table) for every year after 1950 that we would use to build the model.
+
+Win totals for every season from 1950 came from Baseball Reference, which has exportable win data for every team since 1901. We opted to use data from 1950 to 2018 because the structure of the League was different in its early years from how it is today.
+
+After downloading and aggregating the data, we joined the two data sets into one by matching the team-year pairs from both of the tables, which left us with one data frame of counting statistics and wins at the team level for each team in every year since 1950. The statistics that we have kept track of are earned runs, home runs allowed, walks allowed, strikeouts (by pitchers and hitters), total bases, runs scored, RBI, walks by hitters, WAR for hitters, WAR for pitchers, overall WAR (hitters plus pitchers) and team wins. We chose all of these statistics because they make up the majority of the basic counting statistics for major league players, are the statistics used to calculate averaged statistics like batting average, slugging percentage, and earned run average, and were statistics used in the literature referenced above. Thus, we would expect that they would account for most of the variability in team wins in a given season.
+
+It is worth noting that we standardized all of our variables but `wins`. Our motivation to standardize the variables was several convergence issues with fitting the model with the original dataset and almost no effective draws from our Markon chains in our HMC process. Once we standardized our explanatory variables, the chains were able to converge and produce significantly more effective draws.
+
+Table 5 in the Appendix contains summary statistics for all of our variables of interest.
+
+## METHODS
+
+Since we are modeling a posterior with a count value, we use poisson regression with parameter $\lambda$ representing the mean number of wins. In our comparison, we are looking at two models - a model considering only WAR to account for wins in a season (Model 1), as well as a model using other count statistics (Model 2).
+
+For Model 1, we have a poisson posterior on the log number of wins being a linear function of our intercept and beta coefficient for WAR.
+\newpage
+\begin{center}
+\textbf{Model 1: WAR Model} \\
+$ log(Wins) \sim Pois(\lambda)$ \\
+$\log{(\lambda)} = \alpha + \beta \cdot WAR$ \\
+$\alpha \sim N(4,3$) \\
+$\beta \sim N(0,.5)$
+\end{center}
+
+For our prior specifications, we took into account the previous studies about WAR and how it is calibrated for in season performance. Since the previous studies found wins were represented as a linear function with WAR as $Wins = 52 + 1.0 \cdot WAR$ (i.e., an additional unit of WAR increases the expected number of wins by 1), we wanted to incorporate this knowledge into our prior specification. As a result, we put a normal prior on our intercept coefficient, centered at 4 with a standard deviation of 3, which is rather diffuse considering we expect our intercept to be close to $e^4 = 54.6$. Our slope coefficient for $\beta$ is best represented around 0, as we would expect a small multiplicative change in wins for every additional increase of 10.8 (sample standard deviation of WAR) in WAR. Recall our variables are scaled, so $e^\beta$ actually represents the expected multiplicative change in wins given an increase of $sd(WAR)$ in WAR.
+
+Model 2 accounts for several aggregated count statistics for a team. Since WAR is calculated as a function of count statistics and other adjustments, it should be able to predict wins more accurately than a model taking into account only count statistics. Model 2 uses a team's earned runs, pitching walks, strikeouts (pitcher), total bases, runs, stolen bases, walks (hitters), strikeouts (hitters) to predict wins.
+
+For the same reason as in Model 1, we use Poisson regression to model wins because our response variable (wins) is a count. More thought was needed in our prior specification for this model. We wanted our priors to be regularizing in order to reduce overfitting our model. However, we could not make them as informative as the prior on WAR in Model 1 because the theoretical relationship between hits, for example, and wins is not as clear. However, we still believe that the multiplicative change associated with any of these counting statistics should be very close to zero. The rationale behind this choice of a prior is straightforward: a unit-increase in the standard deviation of something like runs (i.e. a team scoring about 108 more runs over the course of a season) should have a very small multiplicative effect on that team's total wins, because, in real terms, a multilicative change of 1.1 could correspond to as many as 10 wins. We would not expect, for instance, a team with additional 108 runs to increase the number of wins by 40%. As such, we again centered our priors at 0 with a very small standard deviation of .1.
+
+\begin{center}
+\textbf{Model 2: Count Statistics}
+\\
+$\log{(Wins)} \sim Pois(\lambda)$ \\ 
+$\lambda = \alpha + \beta_1(ER) + \beta_2(BB_p) +\beta_3(K_p) +$ \\
+$\beta_4(HR) + \beta_5(SB) + \beta_6(BB_h) + \beta_7(K_h) + \beta_8(TB)$\\
+$\alpha \sim N(4,3)$ \\
+$\beta_{1,...,8} \sim N(0,.1)$
+\end{center}
+
+## RESULTS
+
+We used Hamiltonian Monte Carlo (HMC) to estimate both of our Poisson models. For Model 1, we used a warmup period of 1000 iterations, 6 chains, and 10,000 iterations overall. For Model 2, we still used 10,000 iterations, but we used a warmup period of 4,000 instead of 1,000 with 6 chains. Using 6 chains and 10,000 iterations let us draw large numbers of effective samples for each predictor in our model. 
+
+\begin{center}
+\large{Figure 1: Model 1 HMC Simulation}
+```{r, echo=F, fig.align = 'c', fig.height=3, fig.width=8}
+plot(war.mod, alpha = .6)
+```
+\end{center}
+
+Model 1 quickly converged and stabilized. Analyzing Figure 1, one sees that, for both $a$ and $b$, the chains started at different locations but converged to the same distribution at around 4.4 and 0.15, respectively, after relatively few iterations. Furthermore, we observe that both parameters had over 45,000 effective draws. Therefore, both the convergence to a single distribution and the high number of effective draws indicate well-behaved chains. 
+
+\newpage
+\vspace{.25in}
+\begin{center}
+\large{Figure 2: Model 2 HMC Simulation}
+\vspace{.25in}
+\end{center}
+
+```{r, fig.height=5, fig.width=6, fig.align='center'}
+plot(otherstats.mod)
+```
+
+\vspace{.25in}
+
+Although Model 2 had eight predictors and therefore increased complexity, we still observed very well behaved chains. For all the parameters, the chains quickly converged to their stationairy distributions. The number of effective draws was above 13,000 for every parameter, which is a good indication that we are getting an accurate representation of our posterior.
+
+
+
+```{r, fig.width=7, fig.height=5, fig.align='center'}
+otherstats_output <- precis(otherstats.mod)@output %>%
+  rownames_to_column() %>%
+  rename("Parameter" = 1) %>%
+  mutate(Parameter = recode(Parameter, a = "Intercept", b_ER = "Earned Runs", b_BB_p = "Walks Allowed", b_K_p = "K (pitchers)", b_TB = "Total Bases", b_R = "Runs", b_SB = "Stolen Bases", b_BB_h = "Walks Drawn", b_K_h = "K (hitters)"),
+         mod = "Model 2")
+
+counts_output <- precis(war.mod)@output %>%
+  rownames_to_column() %>%
+  rename("Parameter" = 1) %>%
+  mutate(Parameter = recode(Parameter, a = "Intercept", b = "WAR"),
+         mod = "Model 1")
+
+output <- bind_rows(counts_output, otherstats_output) %>%
+  filter(Parameter != "Intercept")
+
+# plot 89% HPDI for 
+ggplot(data=output, aes(x=Parameter)) +
+  geom_linerange(aes(ymin=`lower 0.89`, ymax=`upper 0.89`, color = mod),width=0.2, size=2) +
+  geom_point(aes(y=Mean), size=2, shape=21, fill="white") +
+  theme_minimal() +
+  labs(title = "Figure 3: Model Parameter Estimates and Confidence Intervals")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+If we look at the above plot, one general thing to notice is that any parameter estimate which is contained above zero will result in an predicted increase in wins for an increase in the predictor variable's value. Any parameter which is contained below zero will result in a predicted decrease in wins for an increase in the predictor variable's value. For instance, it is interesting to note that in these models, the largest factors for a team's success other than WAR seem to be runs given up and runs scored. This makes sense, as in the most simplistic way, if your team can score more runs than your opponent, you should also be able to win more games than you lose.
+
+```{r}
+compare_table = compare(war.mod, otherstats.mod)@output %>% rownames_to_column()
+colnames(compare_table)[1] = "Model"
+compare_table = compare_table %>% mutate(Model = c("Model 1", "Model 2"))
+kable(compare_table, digits = 3, align = 'c', caption = "WAIC Comparison of Models")
+```
+
+The table above shows a comparison of the two models we fit. Model 1, unsurprisingly, performs much better than Model 2. The difference in WAIC between Model 2 and Model 1 is `r round(compare_table[2,4], digits = 3)`, which is a large difference (large enough to make Model 1's Akaike Weight 1). Another way of comparing the accuracy of both models is through prediction plots. The plot below shows the different predictions and 89% HPDI prediction intervals for both models. As we can see, Model 1 has both tighter prediction intervals and generally more accurate point predictions than Model 2. 
+
+```{r}
+tempsamp <- sample(x = 30, size = 15, replace = FALSE)
+plot.df = df_scaled[df_scaled$Season==2018,]
+plot.df = plot.df[tempsamp, ]
+
+war_link = sim(war.mod, refresh=0, data=plot.df)
+noWar_link = sim(otherstats.mod, refresh=0, data=plot.df)
+```
+
+
+\vspace{.25in}
+```{r PRED CIs, fig.align='center'}
+predPlot.df = data.frame(team = unique(plot.df$Team),
+           meanPred = c(apply(war_link ,2, mean),apply(noWar_link ,2, mean)),
+           low = c(apply(war_link, 2, HPDI)[1,],apply(noWar_link, 2, HPDI)[1,]),
+           high = c(apply(war_link, 2, HPDI)[2,],apply(noWar_link, 2, HPDI)[2,]),
+           model= c(rep("WAR", 15), rep("No War", 15)),
+           wins = plot.df$Wins)
+
+ggplot(predPlot.df) + theme_minimal() +
+  geom_linerange(aes(x=team, ymin=low, ymax=high, color=model),width=0.2, size=2, position = position_dodge(width = .25)) +
+  geom_point(aes(x=team,y=meanPred, col=model), size=3, shape=21, fill="white", position = position_dodge(width = .25)) +
+  geom_point(aes(x=team,y=wins), size=3, shape=10, fill="white") +
+  ggtitle("Model 1 and 2 Predictions for Ten 2018 Teams") +
+  labs(y="Wins",x="Team")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+\vspace{.25in}
+
+```{r}
+war.output = precis(war.mod)@output
+# war.output
+# otherstats_output
+```
+
+In Model 1, the exponent of the estimated intercept indicates the expected number of wins for a team that has the average WAR. The average WAR in our dataset is `r round(mean(df$WAR), digits = 3)`, and the expected number of wins for a team with average WAR is $e^{\hat\alpha} =`r round(exp(war.output[1,1]), digits = 3)`$. The coefficient of $\beta$ is `r round(war.output[2,1], digits = 3)`, and it indicates that, for every unit increase in WAR, there is an increase in the expected number of wins by a factor of `r round(exp(war.output[2,1]/sd(df$WAR)), digits = 3)`.
+
+The coefficients in Model 2 has similar interpretations. The intercept indicates that the expected number of wins for a team with league average values for all predictor variables has an expected number of wins of $`r round(exp(otherstats_output[1,2]), digits = 3)`$. Because there is a large number of parameters in the model, we will interpret only two of them. $\beta_{ER}$, the coefficient for Earned Runs, and $\beta_{SB}$, the coefficient for Stolen Bases. Our model estimated $\hat\beta_{ER} = `r round(otherstats_output[2,2], digits = 3)`$, so the expected multiplicative change in the number of wins given a one standard deviation in Earned Runs (which corresponds to `r round( sd(df$ER), digits = 3)` earned runs) is $`r round(exp(otherstats_output[2,2]), digits = 3)`$. This makes sense, since we would expect the number of wins to decrease as a team allows more runs. For stolen bases, our model estimated $\hat\beta_{SB}=`r round(otherstats_output[7,2], digits = 3)`$, so the expected multiplicative change in the number of wins given a one standard deviation change in stolen bases is `r round(exp(otherstats_output[7,2]), digits = 3)`. One standard deviation for stolen bases is `r round(sd(df$SB), digits = 3)`. This result also makes sense, since one would expect the number of wins to increase as a team steals more bases.
+
+Finally, we needed to check for violations of basic regression assumptions. The plots below show residuals against fitted values and a quantile-quantile plot of our residuals to check for normality.
+
+\vspace{.5cm}
+```{r diagnostics, fig.align= 'c', fig.height=4, fig.width=6}
+war_link = sim(war.mod, refresh=0, data=df_scaled)
+
+preds <- cbind(pred.mean = apply(war_link, 2, mean),    
+  lower.97 = apply(war_link, 2, PI, .97)[1,],
+  upper.97 = apply(war_link, 2, PI, .97)[2,],
+  wins = df_scaled$Wins,
+  team = df_scaled$Team,
+  season = df_scaled$Season) %>%
+  data.frame() %>%
+  mutate_at(.vars = vars(pred.mean, lower.97, upper.97, wins, season),
+             .funs = funs(as.numeric(as.character(.)))) %>%
+  mutate(resids = wins - pred.mean)
+  
+
+temp <- extract.samples(war.mod) %>%
+  data.frame() %>%
+  mutate(WAR = exp(b / sd(df$WAR)), Intercept = exp(a)) %>%
+  select(3:4)
+
+resid.plot <- ggplot(data = preds, aes(x = pred.mean, y = resids))+
+  geom_point(alpha = .3)+
+  geom_abline(intercept = 0, slope = 0)+
+  labs(x = "Fitted Values", y = "Residuals", title = "Residuals vs. Fitted Values")
+
+qq <- ggplot(preds, aes(sample = resids)) +
+  stat_qq(alpha = .2) +
+  stat_qq_line()+
+  labs(title = "Normal QQ Plot of Residuals", x = "Theoretical", y = "Sample")
+
+ggarrange(resid.plot, qq)
+```
+\vspace{.5cm}
+
+Both of these diagnostic plots look good. The residuals seem to be randomly scattered about zero with no pattern to them, so Model 1 is not violating the heteroskedasticity assumption, the linearity assumption, or the autocorrelation assumption. Additionally, since there is only one predictor, we know that there is no collinearity in the predictors in Model 1. Finally, although there seems to be a slight left skew in the residuals, our sample size of 1,630 observations is big enough that we should not worry about potentially violating the normality assumption for the residuals. 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+##Conclusions
+
+Throughout this study, it has been interesting to see the effects of certain individual count statistics when comparing them to the predicted amount of wins in our second model. However, our first model is by far the more accurate model in terms of accurately predicting wins. While WAR is not perfect for predicting wins, the general accuracy of the model indicates that WAR is a very well calibrated statistic, as expected. 
+
+Going forward, it would be equally interesting to test how well basic averaging stats, including batting average, slugging percentage, and more advance averaging and count statistics, including wRC+ and BABIP can predict wins, and whether or not they do a better job than the counting statistics that we chose. Additionally, we would like to be able to create a model which can test year-to-year prediction ability using WAR by fitting a predictive model using WAR in a previous season to predict wins in a future season after accounting for age, trades and signings, and other random noise. 
+
+There are clear implications to models like these for front offices. If a team's ultimate goal is to maximize its win totals in an effort to win the World Series, then they should definitely care about how well calibrated their statistics are that they are using to measure and predict performance, in order to give themselves the best possible chance.
+
+
+\newpage
+## Appendix
+
+
+```{r}
+war.output = (precis(war.mod)@output) %>%
+  rownames_to_column() %>%
+  dplyr::rename("Parameter" = 1) %>%
+  mutate(Parameter = recode(Parameter, "a" = "Intercept", "b" = "WAR"))
+
+
+nowar.output = (precis(otherstats.mod)@output) %>%
+  rownames_to_column() %>%
+  dplyr::rename("Parameter" = 1) %>%
+  mutate(Parameter = recode(Parameter, "a" = "Intercept", "b_ER" = "Earned Runs", "b_BB_p" = "Walks Allowed", "b_K_p" = "K (pitchers)", "b_TB" = "Total Bases", "b_R" = "Runs", "b_SB" = "Stolen Bases", "b_BB_h" = "Walks Drawn", "b_K_h" = "K (hitters)"))
+
+kable(war.output, digits = 3, align = 'c', caption = "Model 1")
+kable(nowar.output, digits = 3, align = 'c', caption = "Model 2")
+
+parameter <- c(war.mod@pars[1:2], otherstats.mod@pars[2:9])
+longname <- c("Intercept", "WAR", "Earned Runs", "Walks Allowed", "Strikeouts (Pitchers)", "Total Bases", "Runs", "Stolen Bases", "Walks Drawn", "Strikeouts (Hitters)")
+```
+
+\newpage
+```{r}
+crosswalk <- data.frame(parameter, longname)
+kable(crosswalk, digits = 3, caption = "Parameter Longnames")
+```
+
+```{r, results='asis'}
+stargazer::stargazer(df, median = TRUE, title = "Summary Statistics", omit = c("Season", "Age", "1B", "2B", "3B", "HR_h", "HR_p", "pWAR", "hWAR"), covariate.labels = c("Wins", "Earned Runs", "Walks Allowed", "K (Pitchers)", "Runs", "Walks Drawn", "K (Hitters)", "Stolen Bases", "WAR", "Total Bases"), omit.table.layout = "n", header = FALSE)
+```
+
+
+\newpage
+##Bibliography
+
+Carleton, R. (2012, October 2). \textit{Baseball Therapy: WARP for People Who Didn’t Like Math Class.} Retrieved November 18, 2018, from https://www.baseballprospectus.com/news/article/18511/baseball-therapy-warp-for-people-who-didnt-like-math-class/
+
+Carleton, R. (2013, September 11). \textit{Reworking WARP: Why We Need Replacement Level.} Retrieved November 18, 2018, from https://www.baseballprospectus.com/news/article/21773/reworking-warp-why-we-need-replacement-level/ 
+
+DuPaul, G. (n.d.). \textit{What is WAR good for?} Retrieved November 18, 2018, from https://www.fangraphs.com/tht/what-is-war-good-for/
+
+Arthur, R. (2017, April 18). Do MLB Teams Undervalue Defense — Or Just Value It Differently? Retrieved November 19, 2018, from https://fivethirtyeight.com/features/do-mlb-teams-undervalue-defense-or-just-value-it-differently/
+
+Krautmann, A. C. (1999). What’s Wrong with Scully-Estimates of a Player’s Marginal Revenue Product. Economic Inquiry, 37(2), 369–381. https://doi.org/10.1111/j.1465-7295.1999.tb01435.x
+
+Scully, G. W. (1974). Pay and Performance in Major League Baseball. American Economic Review, 64(6), 915–930.
+
+Tango, T. (2009, January 26). Misconceptions of WAR. Retrieved November 19, 2018, from http://www.insidethebook.com/ee/index.php/site/article/misconceptions_of_war/
+
+What is WAR? FanGraphs Sabermetrics Library. (n.d.). Retrieved November 19, 2018, from https://www.fangraphs.com/library/misc/war/
+
+Baseball Reference. (2018). \textit{Major League Baseball Team Win Totals}. Retrieved November 15, 2018 from https://www.baseball-reference.com/leagues/MLB/index.shtml
+
+FanGraphs. (2018). \textit{Major League Leaderboards 1950-2018 Batters}. Retrieved November 15, 2018 from https://www.fangraphs.com/leaders.aspx?pos=all&stats=bat&lg=all&qual=y&type=8&season=2018&month=0&season1=1950&ind=1&team=0,to&rost=&age=&filter=&players=
+
+FanGraphs. (2018). \textit{Major League Leaderboards 1950-2018 Pitchers}. Retrieved November 15, 2018 from https://www.fangraphs.com/leaders.aspx?pos=all&stats=pit&lg=all&qual=0&type=8&season=2018&month=0&season1=1950&ind=1&team=0,to&rost=0&age=0&filter=&players=0
+
+
+
