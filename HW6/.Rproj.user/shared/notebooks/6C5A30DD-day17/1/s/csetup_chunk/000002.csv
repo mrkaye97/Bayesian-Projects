@@ -1,0 +1,18 @@
+"0","options(htmltools.dir.version = FALSE)"
+"0","knitr::opts_chunk$set(dev = 'svg')"
+"0","library(rethinking)"
+"0","library(ggplot2)"
+"0","library(dplyr)"
+"0","library(gridExtra)"
+"2","
+Attaching package: ‘gridExtra’
+
+"
+"2","The following object is masked from ‘package:dplyr’:
+
+    combine
+
+"
+"0","library(ggthemes)"
+"2","Error in library(ggthemes) : there is no package called ‘ggthemes’
+"

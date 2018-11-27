@@ -1,0 +1,94 @@
+---
+title: "HW2"
+author: "Matt Kaye"
+date: "9/19/2018"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, echo = FALSE)
+```
+
+```{r}
+rm(list=ls())
+set.seed(646)
+library(rethinking)
+library(tidyverse)
+data(homeworkch3)
+
+tot.boys <- sum(birth1) + sum(birth2)
+```
+
+
+#3H1
+
+```{r}
+df <- data_frame(theta = seq(0,1,length.out=10000)) %>%
+  mutate(prior = dunif(theta, 0, 1),
+         likelihood = dbinom(tot.boys, 200, theta),
+         unstd.posterior = prior * likelihood,
+         posterior = unstd.posterior / sum(unstd.posterior))
+
+
+return <- df[which.max(df$posterior), 'theta'] %>% 
+  unlist() %>% 
+  unname()
+```
+The value of theta that maximizes the posterior probability is $`r round(return, digits = 4)`$.
+
+#3H2
+
+```{r}
+posterior.sample <- sample(x = df$theta, size = 10000, replace = TRUE, prob = df$posterior)
+HPDI(samples = posterior.sample, prob = .5) %>% round(digits = 4)
+HPDI(samples = posterior.sample, prob = .89) %>% round(digits = 4)
+HPDI(samples = posterior.sample, prob = .97) %>% round(digits = 4)
+```
+
+The 50 percent, 89 percent, and 97 percent HPDIs are given above.
+
+#3H3
+
+```{r}
+births.sim <- rbinom(n = 10000, size = 200, prob = posterior.sample)
+
+dens(births.sim, show.HPDI = .97, norm.comp = TRUE)
+abline(v = 111)
+```
+
+In this case, it does look like the model fits the data well becuase the total number of boys in the data falls pretty much right in the middle of the distribution of our approximated posterior. 
+
+#3H4
+
+```{r}
+firstborn.sim <- rbinom(n = 10000, size = 100, prob = posterior.sample)
+
+
+dens(firstborn.sim, show.HPDI = .89, norm.comp = TRUE)
+abline(v = sum(birth1))
+```
+
+In this case, the model looks a little bit worse, but still okay. Again, the number of firstborn boys (51) falls well within our 89 percent HPDI.
+
+#3H5
+
+```{r}
+num.girl.first = length(birth1) - sum(birth1)
+
+births <- data.frame(birth1, birth2)
+boy.girl <- births %>%
+  filter(birth1 == 0 & birth2 == 1) %>%
+  nrow()
+
+girl.first.sim <- rbinom(n = 10000, size = 49, prob = posterior.sample)
+
+
+dens(girl.first.sim, show.HPDI = .97)
+abline(v = boy.girl)
+
+```
+
+In this case, the model does not fit the data particularly well. The observed count of 39 is well outside of even a 97 percent HPDI. This implies that we should not necessarily assume that there is independence in the genders of first and second children.

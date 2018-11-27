@@ -1,0 +1,6 @@
+"0","library(tidyverse)"
+"0","df <- data_frame(theta = seq(0, 1, length.out = 10000)) %>%"
+"0","  mutate(prior = dunif(theta, 0, 1),"
+"0","         likelihood = dbinom(8, 15, theta),"
+"0","         unstd.posterior = prior * likelihood,"
+"0","         posterior = unstd.posterior / sum(unstd.posterior))"

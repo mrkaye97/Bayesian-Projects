@@ -1,0 +1,6 @@
+"0","black <- df %>%"
+"0","  filter(`Demographic.Value` %in% c(""Black"", ""Non-Hispanic White"") & Geography == ""United States"") %>%"
+"0","  mutate(black = ifelse(Demographic.Value == ""Black"", 1, 0))"
+"0","ggplot(black)+"
+"0","  geom_point(aes(x = Time, y = Value, color = `Demographic.Value`))+"
+"0","  geom_smooth(aes(x = Time, y = Value, color = `Demographic.Value`), method = ""lm"")"

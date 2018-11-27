@@ -1,0 +1,7 @@
+"0","num.girl.first = length(birth1) - sum(birth1)"
+"0","births <- data.frame(birth1, birth2)"
+"0","boy.girl <- births %>%"
+"0","  filter(birth1 == 0 & birth2 == 1) %>%"
+"0","  nrow()"
+"0","girl.first.sim <- rbinom(n = 10000, size = 49, prob = posterior.sample)"
+"0","dens(girl.first.sim, show.HPDI = .97)"

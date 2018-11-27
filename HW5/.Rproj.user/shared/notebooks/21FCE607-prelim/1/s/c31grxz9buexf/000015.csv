@@ -1,0 +1,6 @@
+"0","us <- df %>%"
+"0","  filter(Geography == ""United States"" & Demographic == ""Race"" & Time > 2008)"
+"0","ggplot(us)+"
+"0","  geom_point(aes(x = Time, y = Value, color = `Demographic.Value`))+"
+"0","  geom_smooth(aes(x = Time, y = Value, color = `Demographic.Value`), method = ""lm"")+"
+"0","  geom_smooth(aes(x = Time, y = Value), method = ""lm"", color = ""black"")"

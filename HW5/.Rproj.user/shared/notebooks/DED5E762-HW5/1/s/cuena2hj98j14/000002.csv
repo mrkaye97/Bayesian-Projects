@@ -1,0 +1,7 @@
+"0","data(Howell1)"
+"0","d <- Howell1"
+"0","d$age <- (d$age - mean(d$age))/sd(d$age)"
+"0","set.seed( 1000 )"
+"0","i <- sample(1:nrow(d),size=nrow(d)/2)"
+"0","d1 <- d[ i , ]"
+"0","d2 <- d[ -i , ]"

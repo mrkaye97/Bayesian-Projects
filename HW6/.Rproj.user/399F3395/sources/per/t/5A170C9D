@@ -1,0 +1,23 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1540575958754.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "3070081161",
+    "id" : "5A170C9D",
+    "lastKnownWriteTime" : 1540578043,
+    "last_content_update" : 1540578043224,
+    "path" : "~/Google Drive/Carleton/Junior Year/MATH315/Metropolis-Hastings Classwork/ws-metropolis-hastings-handout.Rmd",
+    "project_path" : null,
+    "properties" : {
+        "cursorPosition" : "108,31",
+        "last_setup_crc32" : "99F3FAB375128e7",
+        "scrollLine" : "91"
+    },
+    "relative_order" : 2,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_markdown"
+}

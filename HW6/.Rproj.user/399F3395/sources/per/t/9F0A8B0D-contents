@@ -1,0 +1,381 @@
+---
+title: "HW6"
+author: "Matt Kaye"
+date: "10/24/2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+rm(list = ls())
+library(tidyverse)
+library(rethinking)
+```
+
+```{r}
+data(Howell1)
+d <- Howell1
+d$age <- (d$age - mean(d$age))/sd(d$age)
+set.seed(1000)
+i <- sample(1:nrow(d),size=nrow(d)/2)
+d1 <- d[i,]
+d2 <- d[-i,]
+```
+
+```{r, cache=TRUE}
+m1 <- rethinking::map(alist(
+  height ~ dnorm(mu, sigma),
+  mu <- a + b1*age,
+  a ~ dnorm(0, 100),
+  b1 ~ dnorm(0, 100),
+  sigma ~ dunif(0 , 50)), data = d1, start = list(a = 0, b1 = 0, sigma = sd(d1$height)))
+
+m2 <- rethinking::map(alist(
+  height ~ dnorm(mu, sigma),
+  mu <- a + b1*age + b2*age^2,
+  a ~ dnorm(0, 100),
+  b1 ~ dnorm(0, 100),
+  b2 ~ dnorm(0, 100),
+  sigma ~ dunif(0, 50)
+), data = d1, start = list(a = 0, b1 = 0, b2 = 0, sigma = sd(d1$height)))
+
+m3 <- rethinking::map(alist(
+  height ~ dnorm(mu, sigma),
+  mu <- a + b1*age + b2*age^2 + b3*age^3,
+  a ~ dnorm(0, 100),
+  b1 ~ dnorm(0, 100),
+  b2 ~ dnorm(0, 100),
+  b3 ~ dnorm(0, 100),
+  sigma ~ dunif(0 , 50)), data = d1, start = list(a = 0, b1 = 0, b2 = 0, b3 = 0, sigma = sd(d1$height)))
+
+m4 <- rethinking::map(alist(
+  height ~ dnorm(mu, sigma),
+  mu <- a + b1*age + b2*age^2 + b3*age^3 + b4*age^4,
+  a ~ dnorm(0, 100),
+  b1 ~ dnorm(0, 100),
+  b2 ~ dnorm(0, 100),
+  b3 ~ dnorm(0, 100),
+  b4 ~ dnorm(0, 100),
+  sigma ~ dunif(0 , 50)), data = d1, start = list(a = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, sigma = sd(d1$height)))
+
+m5 <- rethinking::map(alist(
+  height ~ dnorm(mu, sigma),
+  mu <- a + b1*age + b2*age^2 + b3*age^3 + b4*age^4 + b5*age^5,
+  a ~ dnorm(0, 100),
+  b1 ~ dnorm(0, 100),
+  b2 ~ dnorm(0, 100),
+  b3 ~ dnorm(0, 100),
+  b4 ~ dnorm(0, 100),
+  b5 ~ dnorm(0, 100),
+  sigma ~ dunif(0 , 50)), data = d1)
+
+m6 <- rethinking::map(alist(
+  height ~ dnorm(mu, sigma),
+  mu <- a + b1*age + b2*age^2 + b3*age^3 + b4*age^4 + b5*age^5 + b6*age^6,
+  a ~ dnorm(0, 100),
+  b1 ~ dnorm(0, 100),
+  b2 ~ dnorm(0, 100),
+  b3 ~ dnorm(0, 100),
+  b4 ~ dnorm(0, 100),
+  b5 ~ dnorm(0, 100),
+  b6 ~ dnorm(0, 100),
+  sigma ~ dunif(0 , 50)), data = d1, start = list(a = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0, sigma = sd(d1$height)))
+
+```
+
+#6H2
+```{r}
+grid <- data.frame(age = seq(-1.5, 3, length.out = 1000))
+mods <- c(m1, m2, m3, m4, m5, m6)
+plots <- vector(mode = "list", length = 6)
+
+for (i in 1:6) {
+  mu <- link(fit = mods[[i]], data = grid, refresh = 0) %>%
+  data.frame()
+
+  mu.bands <- cbind(
+    age = grid,
+    mu.mean = apply(mu, 2, mean),
+    mu.hpdi = t(apply(mu, 2, HPDI, p = .97))
+  )
+  
+  plots[[i]] <- ggplot(data=mu.bands)+
+    geom_point(data = d1, mapping=aes(x=age,y=height),alpha=0.5)+
+    geom_ribbon(mapping=aes(x=age,ymin=`mu.hpdi.|0.97`,ymax=`mu.hpdi.0.97|`, color = 'red'),alpha=0.3)+
+    labs(x="Age",y="Height") +
+    theme_minimal()
+}
+
+gridExtra::grid.arrange(plots[[1]], plots[[2]], plots[[3]], plots[[4]], plots[[5]], plots[[6]], nrow = 3)
+
+
+```
+
+#6H3
+```{r, results = 'hide'}
+temp <- ensemble(m1, m2, m3, m4, m5, m6, refresh = 0)
+
+ensemble.preds <- d1 %>%
+  mutate(
+    mu = apply(temp$link, 2, mean),
+    mu.lo = apply(temp$link, 2, PI)[1,],
+    mu.hi = apply(temp$link, 2, PI)[2,]
+) %>%
+  unique()
+```
+
+
+
+```{r}
+ggplot(data = ensemble.preds, aes(x = age, y = height)) +
+    geom_point(data = d1, aes(x = age, y = height))+
+    geom_ribbon(aes(x=age,ymin=mu.lo,ymax=mu.hi),alpha=0.3)+
+  theme_minimal()+
+  labs(title = 'ensemble predictions')
+```
+
+
+#7H1
+\begin{center}
+model with dummies for beds a and b
+\end{center}
+```{r}
+rm(list = ls())
+set.seed(646)
+
+data(tulips)
+df <- tulips %>%
+  mutate(bedA = ifelse(bed == 'a', 1, 0),
+         bedB = ifelse(bed == 'b', 1, 0),
+         shade = shade - mean(shade),
+         water = water - mean(water))
+
+mod.bed <- rethinking::map(
+    alist(
+        blooms ~ dnorm( mu , sigma ) ,
+        mu <- a + bW*water + bS*shade + bWS*water*shade + bBa*bedA + bBb*bedB ,
+        a ~ dnorm( 0 , 100 ) ,
+        bW ~ dnorm( 0 , 100 ) ,
+        bS ~ dnorm( 0 , 100 ) ,
+        bWS ~ dnorm( 0 , 100 ) ,
+        bBa ~ dnorm(0, 100),
+        bBb ~ dnorm(0, 100),
+        sigma ~ dunif( 0 , 100 )
+),
+data=df , control=list(maxit=1e4), start = list(a = mean(df$blooms), bW = 0, bS = 0, bWS = 0, bBa = 0, bBb = 0, sigma = sd(df$blooms)))
+```
+
+```{r}
+knitr::kable(precis(mod.bed)@output, format = 'markdown', align = 'c')
+```
+
+#7H2
+
+\begin{center}
+model without dummies for beds a and b
+\end{center}
+```{r}
+mod.nobed <- rethinking::map(
+    alist(
+        blooms ~ dnorm( mu , sigma ) ,
+        mu <- a + bW*water + bS*shade + bWS*water*shade ,
+        a ~ dnorm( 0 , 100 ) ,
+        bW ~ dnorm( 0 , 100 ) ,
+        bS ~ dnorm( 0 , 100 ) ,
+        bWS ~ dnorm( 0 , 100 ) ,
+        sigma ~ dunif( 0 , 100 )
+),
+data=df, control=list(maxit=1e4), start = list(a = mean(df$blooms), bW = 0, bS = 0, bWS = 0, sigma = sd(df$blooms)) )
+
+
+temp <- rethinking::compare(mod.bed, mod.nobed)
+knitr::kable(temp@output, format = 'markdown', align = 'c', digits = 3)
+knitr::kable(precis(mod.nobed)@output, format = 'markdown', align = 'c', digits = 3)
+```
+
+The WAIC values of the two models are about equal, which suggests that they predict equally well out of sample. However, it is interesting that the WAIC values are similar while the coefficient on the bed b dummy is significant, because I would expect that the significance of that dummy would mean that we would want to include the dummy and get better predictions in doing so. This is a little bit concerning, and I am curious to know more of why this is the case. 
+
+#7H3
+
+##a
+```{r}
+rm(list = ls())
+data(rugged)
+w.seychelles <- rugged %>%
+  mutate(log.gdp = log(rgdppc_2000)) %>%
+  select(country, log.gdp, cont_africa, rugged) %>%
+  na.omit()
+
+wo.seychelles <- w.seychelles %>%
+  filter(country != "Seychelles")
+
+
+mod.w.seychelles <- map(
+    alist(
+        log.gdp ~ dnorm( mu , sigma ) ,
+        mu <- a + bR*rugged + bA*cont_africa + bAR*cont_africa*rugged,
+        a ~ dnorm( 8 , 100 ) ,
+        bR ~ dnorm( 0 , 1 ) ,
+        bA ~ dnorm( 0 , 1 ) ,
+        bAR ~ dnorm( 0, 1 ),
+        sigma ~ dunif( 0 , 10 )
+), data=w.seychelles, method = "Nelder-Mead", start = list(a = 10 , bR = 0, bA = -2, bAR = 0, sigma =1 )
+)
+
+mod.wo.seychelles <- map(
+    alist(
+        log.gdp ~ dnorm( mu , sigma ) ,
+        mu <- a + bR*rugged + bA*cont_africa + bAR*cont_africa*rugged,
+        a ~ dnorm( 8 , 100 ) ,
+        bR ~ dnorm( 0 , 1 ) ,
+        bA ~ dnorm( 0 , 1 ) ,
+        bAR ~ dnorm( 0, 1 ),
+        sigma ~ dunif( 0 , 10 )
+), data=wo.seychelles, method = "Nelder-Mead", start = list(a = 10 , bR = 0, bA = -2, bAR = 0, sigma =1 )
+)
+```
+
+\begin{center}
+with Seychelles
+\end{center}
+```{r}
+knitr::kable(precis(mod.w.seychelles)@output, format = 'markdown', align = 'c', digits = 3)
+```
+
+
+\begin{center}
+without Seychelles
+\end{center}
+```{r}
+knitr::kable(precis(mod.wo.seychelles)@output, format = 'markdown', align = 'c', digits = 3)
+knitr::kable(compare(mod.w.seychelles, mod.wo.seychelles)@output, format = 'markdown', align = 'c', digits = 3)
+```
+
+
+After fitting the interaction models, it does seem like the ruggedness depends on contininent because the interaction term between the two is highly statistically significant in both models. However, it is interesting that the interaction term changed by so much after removing the Seychelles, which suggests that it is pulling our results. The WAIC values of the two models are also virtually identical, which means that the two models have just about equally good out of sample performance.
+
+##b
+```{r}
+samples <- expand.grid(cont_africa = w.seychelles$cont_africa, rugged = w.seychelles$rugged)
+
+mu <- link(fit = mod.w.seychelles, data = samples, refresh = 0) %>%
+  data.frame()
+
+mu.bands <- cbind(
+  mu.mean = apply(mu, 2, mean),
+  cont_africa = samples$cont_africa,
+  rugged = samples$rugged,
+  mu.hpdi = t(apply(mu, 2, HPDI, prob = .95))
+) %>%
+  data.frame() %>%
+  rename(lower = 4, upper = 5)
+
+africa <- mu.bands %>%
+  filter(cont_africa == 1)
+
+other <- mu.bands %>%
+  filter(cont_africa == 0)
+
+with.seychelles <- ggplot(data = mu.bands, aes(x = rugged, y = mu.mean)) +
+    geom_point(data = africa, aes(x = rugged, y = mu.mean, color = 'africa'))+
+    geom_point(data = other, aes(x = rugged, y = mu.mean, color = 'other'))+
+    geom_ribbon(data = africa, mapping=aes(x=rugged,ymin=lower,ymax=upper),alpha=0.3)+
+    geom_ribbon(data = other, mapping=aes(x=rugged,ymin=lower,ymax=upper),alpha=0.3)+
+  theme_minimal()+
+  labs(title = 'with Seychelles')
+
+samples <- expand.grid(cont_africa = wo.seychelles$cont_africa, rugged = wo.seychelles$rugged)
+
+mu <- link(fit = mod.wo.seychelles, data = samples, refresh = 0) %>%
+  data.frame()
+
+mu.bands <- cbind(
+  mu.mean = apply(mu, 2, mean),
+  cont_africa = samples$cont_africa,
+  rugged = samples$rugged,
+  mu.hpdi = t(apply(mu, 2, HPDI, prob = .95))
+) %>%
+  data.frame() %>%
+  rename(lower = 4, upper = 5)
+
+africa <- mu.bands %>%
+  filter(cont_africa == 1)
+
+other <- mu.bands %>%
+  filter(cont_africa == 0)
+
+without.seychelles <- ggplot(data = mu.bands, aes(x = rugged, y = mu.mean)) +
+    geom_point(data = africa, aes(x = rugged, y = mu.mean, color = 'africa'))+
+    geom_point(data = other, aes(x = rugged, y = mu.mean, color = 'other'))+
+    geom_ribbon(data = africa, mapping=aes(x=rugged,ymin=lower,ymax=upper),alpha=0.3)+
+    geom_ribbon(data = other, mapping=aes(x=rugged,ymin=lower,ymax=upper),alpha=0.3)+
+  theme_minimal()+
+  labs(title = 'without seychelles')
+
+gridExtra::grid.arrange(with.seychelles, without.seychelles, nrow = 1)
+```
+
+In both plots, it seems like the effect of ruggedness depends on continent (i.e. excluding the Seychelles does not have that big of an impact on the overall trends). The expected relationship has changed a little bit when we exclude the Seychelles. The model with the Seychelles has a steeper slope than the one without the Seychelles, but both are still upward-sloping.
+
+#c
+```{r, results = 'hide'}
+mod1 <- rethinking::map(
+  alist(
+    log.gdp ~ dnorm(mu, sigma),
+    mu <- a + bR*rugged,
+    a ~ dnorm( 8 , 100 ) ,
+    bR ~ dnorm( 0 , 1 ) ,
+    sigma ~ dunif( 0 , 10 )
+), data=wo.seychelles, method = "Nelder-Mead", start = list(a = 10 , bR = 0, sigma =1 ))
+
+mod2 <- rethinking::map(
+  alist(
+    log.gdp ~ dnorm(mu, sigma),
+    mu <- a + bR*rugged + bA*cont_africa,
+    a ~ dnorm( 8 , 100 ) ,
+    bR ~ dnorm( 0 , 1 ) ,
+    bA ~ dnorm( 0 , 1 ) ,
+    sigma ~ dunif( 0 , 10 )
+), data=wo.seychelles, method = "Nelder-Mead", start = list(a = 10 , bR = 0, bA = 0, sigma =1 ))
+
+mod3 <- map(
+    alist(
+        log.gdp ~ dnorm( mu , sigma ) ,
+        mu <- a + bR*rugged + bA*cont_africa + bAR*cont_africa*rugged,
+        a ~ dnorm( 8 , 100 ) ,
+        bR ~ dnorm( 0 , 1 ) ,
+        bA ~ dnorm( 0 , 1 ) ,
+        bAR ~ dnorm( 0, 1 ),
+        sigma ~ dunif( 0 , 10 )
+), data=wo.seychelles, method = "Nelder-Mead", start = list(a = 10 , bR = 0, bA = -2, bAR = 0, sigma =1)
+)
+
+temp <- ensemble(mod1, mod2, mod3, refresh = 0)
+```
+
+```{r}
+ensemble.preds <- wo.seychelles %>%
+  mutate(
+    mu = apply(temp$link, 2, mean),
+    mu.lo = apply(temp$link, 2, PI)[1,],
+    mu.hi = apply(temp$link, 2, PI)[2,]
+) %>%
+  unique()
+
+africa <- ensemble.preds %>%
+  filter(cont_africa == 1)
+
+other <- ensemble.preds %>%
+  filter(cont_africa == 0)
+
+ggplot(data = ensemble.preds, aes(x = rugged, y = mu)) +
+    geom_point(data = africa, aes(x = rugged, y = mu, color = 'africa'))+
+    geom_point(data = other, aes(x = rugged, y = mu, color = 'other'))+
+    geom_ribbon(data = africa, mapping=aes(x=rugged,ymin=mu.lo,ymax=mu.hi),alpha=0.3)+
+    geom_ribbon(data = other, mapping=aes(x=rugged,ymin=mu.lo,ymax=mu.hi),alpha=0.3)+
+  theme_minimal()+
+  labs(title = 'ensemble predictions')
+```
+
+This plot of the model averaged predictions looks pretty similar to the previous plots without model averaging, which suggests that the inferences do not change all that much from the previous question to this one. Overall, the slopes of the lines look more or less the same and the differencei in the intercepts seems significant, as well, which is what we expected based on our previous models.
+

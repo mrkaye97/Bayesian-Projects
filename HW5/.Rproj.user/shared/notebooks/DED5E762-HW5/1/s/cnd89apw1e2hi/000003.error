@@ -1,0 +1,1 @@
+{"frames":[{"character_number":0,"end_character_number":0,"end_line_number":0,"file":"","func":"dnorm(d2$height, mu, sigma, log = TRUE)","line_number":0}],"message":"Error in dnorm(d2$height, mu, sigma, log = TRUE) : object 'mu' not found\n"}

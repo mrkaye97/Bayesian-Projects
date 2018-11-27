@@ -1,0 +1,72 @@
+---
+title: "prelim"
+author: "Matt Kaye"
+date: "10/16/2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls())
+library(tidyverse)
+library(gdata)
+library(data.table)
+library(rethinking)
+library(plm)
+```
+
+```{r}
+df <- fread("/users/matt/google drive/carleton/junior year/econ395/raw_data/state_level.csv", skip = 7, drop = c(1, 8:26)) %>%
+  rename(Demographic.Value = "Demographic Value", N.Size = "N Size")
+```
+
+#Overall Panel
+```{r}
+race.us <- df %>%
+  filter(Demographic == "Race" & Geography == "United States") %>%
+  mutate(Race = as.factor(Demographic.Value))
+
+plm(Value ~ N.Size, data = race, model = "within", index = c("Time", "Race"))
+```
+
+
+#United States
+```{r}
+us <- df %>%
+  filter(Geography == "United States" & Demographic == "Race" & Time > 2008)
+
+ggplot(us)+
+  geom_point(aes(x = Time, y = Value, color = `Demographic.Value`))+
+  geom_smooth(aes(x = Time, y = Value, color = `Demographic.Value`), method = "lm")+
+  geom_smooth(aes(x = Time, y = Value), method = "lm", color = "black")
+```
+
+#Black
+```{r}
+black <- df %>%
+  filter(`Demographic.Value` %in% c("Black", "Non-Hispanic White") & Geography == "United States") %>%
+  mutate(black = ifelse(Demographic.Value == "Black", 1, 0))
+
+ggplot(black)+
+  geom_point(aes(x = Time, y = Value, color = `Demographic.Value`))+
+  geom_smooth(aes(x = Time, y = Value, color = `Demographic.Value`), method = "lm")
+
+freq.lm <- lm(Value ~ Time + black*Time, data = black)
+
+flist <- alist(
+  Value ~ dnorm(mu, sigma),
+  mu <- a + b1*Time + b2*black + b3*black*Time,
+  a ~ dnorm(5, 5),
+  b1 ~ dnorm(5, 5),
+  b2 ~ dnorm(5, 5),
+  b3 ~ dnorm(5, 5),
+  sigma ~ dunif(0 , 10)
+)
+
+bayes.lm <- rethinking::map(flist = flist, data = black)
+
+summary(freq.lm)
+summ <- precis(bayes.lm)
+summ@output
+```
+

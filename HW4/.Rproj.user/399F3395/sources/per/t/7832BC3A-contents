@@ -1,0 +1,76 @@
+---
+title: "metrics help"
+author: "Matt Kaye"
+date: "10/7/2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=FALSE}
+library(gdata)
+library(tidyverse)
+library(car)
+library(stargazer)
+
+df <- read.csv("/users/matt/downloads/ps5.csv")
+```
+
+#4
+```{r}
+log.df <- df %>%
+  mutate(
+    Q = log(Q),
+    LABSK = log(LABSK),
+    KAP = log(KAP),
+    ENERGY = log(ENERGY),
+    LABUN = log(LABUN),
+    MATER = log(MATER)
+    )
+
+r.df <- log.df %>%
+  mutate(
+    un.m.sk = LABUN - LABSK,
+    k.m.sk = KAP - LABSK,
+    e.m.sk = ENERGY - LABSK,
+    m.m.sk = MATER - LABSK
+  ) %>%
+  select(Q, LABSK, un.m.sk, k.m.sk, e.m.sk, m.m.sk)
+
+n = nrow(df)
+k = 5
+
+ur.lm <- lm(Q ~ ., data = log.df)
+r.lm <- lm(Q - LABSK ~ ., data = r.df)
+
+stargazer(ur.lm, r.lm, type = "text")
+
+
+f <- (.992 - .968) / ((1-.992)/(n - k - 1))
+
+p.val <- pf(f, 1, n-k, lower.tail = FALSE)
+```
+
+
+#5
+```{r}
+keep(log.df, n, k, sure = TRUE)
+
+
+r.df <- log.df %>%
+  mutate(
+    un.p.sk = LABUN + LABSK
+   ) %>%
+  select(Q, un.p.sk, KAP, ENERGY, MATER)
+
+ur.lm = lm(Q ~ ., data = log.df)
+r.lm = lm(Q ~ ., data = r.df)
+
+stargazer(ur.lm, r.lm, type = "text")
+
+f <- (.992 - .991) / ((1-.992) / (n-k-1))
+p.val <- pf(f, 1, n-k-1, lower.tail = FALSE)
+```
+

@@ -1,0 +1,305 @@
+---
+title: "PSET 4"
+author: "Matt Kaye"
+date: "5/7/2018"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+library(tidyverse)
+library(data.table)
+library(lubridate)
+library(gdata)
+library(car)
+```
+
+#Question 1:
+
+In order to test if there is interaction between the gender and region, I would add both a gender term and an interaction term between gender and region to the model. These two new terms test the effect of gender on wage, and the differing effects of gender on wage in each of the two specified regions, respectively. In this new model, the regression would follow the following equation: $$\hat{Y} = \hat{\beta_{1}} + \hat{\beta_{2}}*Region + \hat{\beta_{3}}*Marital\:Status +  \hat{\beta_{4}} * Gender + \hat{\beta_{5}} (Region * Gender)$$
+
+```{r}
+rm(list = ls())
+df <- fread("http://www.hup.harvard.edu/supplementary/introductory-econometrics/CPS5.txt", fill = TRUE, skip = 14) %>%
+  select(9,6,5,2) %>%
+  rename(wage = V9, marital.status = V6, gender = V5, region = V2) %>%
+  mutate_all(function(x) as.numeric(x))
+
+
+book.lm <- lm(wage ~ marital.status + region, data = df)
+no.intercept.lm <- lm(wage ~ marital.status + region + gender, data = df)
+new.lm <- lm(wage ~ marital.status + region + gender * region, data=df)
+
+
+stargazer::stargazer(book.lm, new.lm, type = "text", dep.var.labels = c("Wage"), covariate.labels = c("Married", "South", "Female", "Interaction"))
+
+anova(no.intercept.lm, new.lm)
+
+```
+Since the interaction term in our regression is not statistically significant, we cannot reject the null hypothesis that there is no interaction between region and gender. ANOVA also supports this assertion, giving an F statistic of .6961 and p value of .4045 for the model with the interaction term relative to the model with only a gender term and no interaction term, which means that adding the interaction term does not improve the model (and thus that the interaction term is not significant). These two results imply that there is no interaction between gender and region.
+The coefficient on the married dummy implies that married people, on average, make \$1.13 more than unmarried people in our sample. The coefficient on the region dummy implies that people in the South, on average, make \$1.36 less than people who are not in the South in our sample. The coefficient on the gender dummy implies that women make \$2.01 less than men in our sample, on average. The coefficient of the interaction term between gender and region imples that women in the South make \$.80 less than women in the rest of the country in our sample, on average. The R-squared value of .08 means that our regressors explain 8 percent of the variability in wages in our sample. Finally, the beta coefficients in the new model on both marriage status and region are slightly higher than the those in the original regression. 
+
+#Question 2:
+
+#a)
+
+```{r}
+rm(list = ls())
+income <- fread("/Users/matt/downloads/disposable_income.csv") %>%
+  mutate(DATE = year(DATE))
+savings <- fread("/Users/matt/downloads/fred_savings.csv") %>%
+  mutate(DATE = year(DATE))
+
+df <- left_join(income, savings, by = "DATE")
+keep(df, sure = TRUE)
+
+df <- df %>%
+  rename(year = 1, income = 2, savings = 3) %>%
+  filter(year >= 1998) %>%
+  mutate_all(function(x) as.numeric(as.character(x))) %>%
+  mutate(dummy = as.factor(sapply(year, function(x) ifelse(x < 2008, "early", "late"))))
+
+
+linear.lm <- lm(savings ~ dummy + income + dummy * income, data = df)
+log.lm <- lm(log(savings) ~ dummy + income + dummy * income, data = df)
+
+stargazer::stargazer(linear.lm, log.lm, type = "text", covariate.labels = c("2008-2017", "Income", "Income 2008-2017 (Interaction)"))
+
+vif(linear.lm)
+```
+Neither of these models is useful in predicting savings based on the statistical significance of the coefficients or their values. There is a serious collinearity problem because income and time are highly correlated (VIF gives 79 for the dummy, 7 for income, and 107 for the interaction term). This collinearity leads to coefficient estimates that are incorrect, insignificant, and do not agree with our a priori expectations. We would expect income to be highly statistically significant in predicting savings and for the coefficient to be positive (since someone would save at least a little bit of each additional dollar of income). Since our results do not agree with this expectation and we know that there is collinearity between the explanatory variables, we should be careful drawing conclusions from this model.
+
+```{r}
+#MWD
+df <- df %>%
+  mutate(Z1 = log(linear.lm$fitted.values) - log.lm$fitted.values,
+         Z2 = exp(log.lm$fitted.values) - linear.lm$fitted.values)
+
+mwd.mod.1 <- lm(savings ~ dummy + income + dummy*income + Z1, data = df)
+mwd.mod.2 <- lm(log(savings) ~ dummy + income + dummy*income + Z2, data = df)
+
+stargazer::stargazer(mwd.mod.1, mwd.mod.2, type = "text", covariate.labels = c("2008-2017", "Income", "Z1", "Z2", "2008-2017 (Interaction)"))
+```
+Following the MWD test, we cannot reject the null hypothesis that the log model is better than the linear one, or vice versa, because Z is not statistically significant in either model. I am skeptical about the relevance of this test on this model, because the original models are irrelevant on their own. 
+\newpage
+
+##b)
+The dummy coefficient in this model is the additional savings that we would expect in the late time period relative to the early time period (we add this number to the intercept term). 
+ 
+##c)
+
+```{r}
+early <- df %>%
+  filter(dummy == "early")
+late <-  df %>%
+  filter(dummy == "late")
+
+early.lm <- lm(log(savings) ~ income, data = early)
+late.lm <- lm(log(savings) ~ income, data = late)
+
+anova.results <- anova(early.lm, late.lm)
+
+early.rss <- anova.results$RSS[1]
+late.rss <- anova.results$RSS[2]
+
+F <- (late.rss / 9) / (early.rss / 9)
+pval <- 1 - pf(F, 9, 9)
+```
+I used an F test to determine whether or not the two estimated error variances from are statistically significantly different. My F-test gave a p-value of .343, which is too high to reject the null hypothesis that the two are the same, so we cannot assert that the estimated error variances are significantly different.
+
+#Question 3:
+
+##a)
+
+```{r}
+rm(list = ls())
+df <- readxl::read_xls("/Users/matt/Google Drive/Carleton/Sophomore Year/ECON329/PSET3/5e_data_sets/Table 2_8.xls", col_names = c("obs", "food", "total"))
+df$obs <- NULL
+df <- df[4:58,]
+
+df <- dplyr::mutate_all(df, function(x) as.numeric(as.character(x)))
+
+linMod <- lm(food ~ total, data = df)
+
+plot(linMod$residuals ~ linMod$fitted.values, xlab = "Fitted Values", ylab = "Residuals", main = "Residuals vs. Fitted Values")
+abline(h = 0, col = "red")
+
+```
+\newline This residual plot looks heteroskedastic. As opposed to a band formed by the residuals and random scatter about 0, we have more of a cone shape, with more dispersed residuals as the fitted values become larger.
+
+##b)
+
+```{r}
+plot(linMod$residuals ~ df$total, xlab = "Total Expenditure", ylab = "Residuals", main = "Residuals vs. Total Expenditure")
+abline(h = 0, col = "red")
+```
+\newline We face the same issue as before when plotting the residuals against total expenditure. As total expenditure increases, the residuals also seem to increase. This suggests that there is heteroskedasticity.
+
+##c)
+
+```{r}
+output <- linMod$model
+output$fitted <- linMod$fitted.values
+output$resid <- linMod$residuals
+
+lm1 <- unname(log((linMod$residuals)^2))
+lm2 <- log(df$total)
+park <- lm(lm1 ~ lm2)
+summary(park)
+```
+In the Park test, the log of total expeniture is statistically significant in predicting the squared residuals, which means that there is heteroskedasticity in our data.
+
+\newpage
+```{r}
+#since total is siginificant in predicting residuals, there is heteroscedasticity
+glejser <- lm(abs(resid) ~ total, data = output)
+summary(glejser)
+```
+In the Glejser test, as was the case in the Park test, total expenditure is statistically significant in predicting the absolute value of the residuals, which, again, means that there is heteroskedasticity in our data.
+
+```{r}
+tesq <- output$total**2
+white <- lm(resid**2 ~ total + tesq, data = output)
+whiteSumm <- summary(white)
+r2 <- whiteSumm$r.squared
+n = nrow(df)
+degFree <- 2
+X2 <- n * r2
+
+#white test p value is below 5%, which means we can reject the null that there is no heteroscedasticity at the 5% level
+whitePVal <- round(pchisq(X2, df = degFree, lower.tail = FALSE), digits = 4)
+
+```
+Finally, the White test gives a p-value of $`r whitePVal`$, which is significant at the 5 percent level. This, again, means that there is heteroskedasticity in our data. All of our tests agree that these data are heteroskedastic, which is reassuring.
+
+##d)
+
+```{r}
+temp <- lmtest::coeftest(linMod, hccm(linMod, type = "hc0"))
+
+lmtest::coeftest(linMod, hccm(linMod, type = "hc0"))
+hskyCorrectedSE <- temp[1:2,2]
+orig <- summary(linMod)
+
+origCoef <- orig$coefficients
+
+tempDf <- data.frame(origCoef[1:2, 2], temp[1:2, 2])
+colnames(tempDf) <- c("Original", "Corrected")
+
+tempDf
+
+```
+Both of the heteroskedasticity-corrected standard errors are slightly smaller than the original standard errors, but not by much. The standard error of the slope coefficient is only about 1\% smaller than the original, so it is probably not worth correcting for heteroskedasticity here.
+
+#Question 4
+
+##a)
+
+```{r}
+rm(list = ls())
+df <- readxl::read_xls("/Users/matt/Google Drive/Carleton/Sophomore Year/ECON329/PSET3/5e_data_sets/Table 2_8.xls", col_names = c("obs", "food", "total"))
+df$obs <- NULL
+df <- df[4:58,]
+
+df <- dplyr::mutate_all(df, function(x) as.numeric(as.character(x)))
+
+linMod <- lm(log(food) ~ log(total), data = df)
+
+
+plot(linMod$residuals ~ linMod$fitted.values, xlab = "Fitted Values", ylab = "Residuals", main = "Residuals vs. Fitted Values")
+abline(h = 0, col = "red")
+
+```
+\newline This residual plot looks heteroskedastic. As opposed to a band formed by the residuals and random scatter about 0, we have more of a cone shape, with more dispersed residuals as the fitted values become larger.
+
+##b)
+
+```{r}
+plot(linMod$residuals ~ log(df$total), xlab = "Log Total Expenditure", ylab = "Residuals", main = "Residuals vs. Total Expenditure")
+abline(h = 0, col = "red")
+```
+\newline We face the same issue as before when plotting the residuals against total expenditure. As total expenditure increases, the residuals also seem to increase. This suggests that there is heteroskedasticity.
+
+##c)
+
+```{r}
+output <- linMod$model
+output$fitted <- linMod$fitted.values
+output$resid <- linMod$residuals
+
+lm1 <- unname(log((linMod$residuals)^2))
+lm2 <- log(df$total)
+park <- lm(lm1 ~ lm2)
+summary(park)
+```
+In this case, the coefficient is no longer significant, which means that we cannot reject the null hypothesis that our data is homeoskedastic.
+\newpage
+```{r}
+#since total is siginificant in predicting residuals, there is heteroscedasticity
+glejser <- lm(abs(resid) ~ `log(total)`, data = output)
+summary(glejser)
+```
+As was the case in the Park test, the coefficient here is also statistically insignificant, which means that we cannot reject the null hypothesis that our data is homeoskedastic.
+```{r}
+tesq <- output$`log(total)`**2
+white <- lm(resid**2 ~ `log(total)` + tesq, data = output)
+whiteSumm <- summary(white)
+r2 <- whiteSumm$r.squared
+n = nrow(df)
+degFree <- 2
+X2 <- n * r2
+
+#white test p value is below 5%, which means we can reject the null that there is no heteroscedasticity at the 5% level
+whitePVal <- pchisq(X2, df = degFree, lower.tail = FALSE)
+```
+The p-value given by the White test is $`r whitePVal`$, which is far too high to reject the null hypothesis that our data is homeoskedastic.
+
+All three of these tests agree, because none of them assert that there is heteroskedasticity. 
+
+##d)
+```{r}
+temp <- lmtest::coeftest(linMod, hccm(linMod))
+hskyCorrectedSE <- temp[1:2,2]
+orig <- summary(linMod)
+
+origCoef <- orig$coefficients
+
+tempDf <- data.frame(origCoef[1:2, 2], temp[1:2, 2])
+colnames(tempDf) <- c("Original", "Corrected")
+
+tempDf
+```
+In this case, our heteroskedasticity-corrected standard errors are about the same as the original standard errors because there is no heteroskedasticity. After doing the log transformation, we no longer have the heteroskedasticity that we had in the original model. This result suggests that transformations (log and probably otherwise, as well), are capable of fixing heteroskedasticity.
+
+\newpage
+#Question 5:
+
+##True/False (ugh)
+
+I played around with the mvrnorm stuff a bunch to figure out how coviariances effect our estimates in regression.
+```{r, echo = TRUE}
+suppressPackageStartupMessages(library(MASS))
+suppressPackageStartupMessages(library(tidyverse))
+
+set.seed(918276)
+varX <- 25; varError <- 500 
+varW <- 5500; covXW <- 0
+(Sigmamatrix <- matrix(c(varX, covXW, 0, 
+                        covXW, varW, 0,
+                        0, 0, varError), 3, 3))
+population <- mvrnorm(n = 100, mu = c(40, 100, 0), Sigma = Sigmamatrix, 
+                      empirical = TRUE) %>% data.frame()
+names(population) <- c("X", "W", "error")
+ 
+beta1 <- 10; beta2 <- -1; beta3 <- 0
+population <- population %>% mutate(Y = beta1 + beta2*X + beta3*W + error)
+
+#plot(Y~X, data = population)
+linmod <- lm(Y ~ X, data = population)
+truemod <- lm(Y ~ X + W, data = population)
+#stargazer::stargazer(linmod, truemod, type = "text")
+```
+
+

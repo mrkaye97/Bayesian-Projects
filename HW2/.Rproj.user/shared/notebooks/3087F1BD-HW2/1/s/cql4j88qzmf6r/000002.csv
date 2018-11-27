@@ -1,0 +1,10 @@
+"0","rm(list=ls())"
+"2","Error in names(frame) <- `*vtmp*` : names() applied to a non-vector
+"
+"2","Error in names(frame) <- `*vtmp*` : names() applied to a non-vector
+"
+"0","set.seed(646)"
+"0","library(rethinking)"
+"0","library(tidyverse)"
+"0","data(homeworkch3)"
+"0","tot.boys <- sum(birth1) + sum(birth2)"

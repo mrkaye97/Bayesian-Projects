@@ -1,0 +1,6 @@
+"0","# load models that were already fit via STAN
+load(""stan_model_fits.RData"")
+"
+"2","cannot open compressed file 'stan_model_fits.RData', probable reason 'No such file or directory'"
+"2","Error in readChar(con, 5L, useBytes = TRUE) : cannot open the connection
+"

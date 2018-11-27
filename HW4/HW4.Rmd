@@ -1,0 +1,256 @@
+---
+title: "HW4"
+author: "Matt Kaye"
+date: "10/3/2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, echo = FALSE)
+library(tidyverse)
+library(rethinking)
+library(gdata)
+set.seed(646)
+```
+
+#1
+```{r}
+rm(list = ls())
+
+data(Howell1)
+df <- Howell1 %>%
+  filter(age >= 18)
+
+flist <- alist(
+    height ~ dnorm(mu , sigma),
+    mu <- a + b*weight,
+    a ~ dnorm(178, 100),
+    b ~ dnorm(0, 10),
+    sigma ~ dunif(0 , 50)
+)
+
+mod <- rethinking::map(flist, data = df)
+
+weight <- c(46.95, 43.72, 64.78, 32.59, 54.63)
+individual <- c(1,2,3,4,5)
+
+mean.sim <- sim(fit = mod, data = list(weight), n = 1e4, refresh = 0)
+expected.height <- apply(X = mean.sim, MARGIN = 2, FUN = mean)
+mean.pi <- apply(X = mean.sim, MARGIN = 2, FUN = PI, prob = .89)
+
+temp <- data.frame(expected.height)
+mean.pi <- t(mean.pi)
+temp <- cbind(weight, temp, mean.pi)
+
+knitr::kable(x = temp, format = "markdown", align = 'c', digits = 3)
+```
+#2a
+```{r}
+rm(list = ls())
+data("foxes")
+foxes <- foxes
+
+flist <- alist(
+    weight ~ dnorm(mu , sigma),
+    mu <- a + b*area,
+    a ~ dnorm(0, 10),
+    b ~ dnorm(0, 10),
+    sigma ~ dunif(0, 100)
+)
+
+fit1 <- rethinking::map(flist, data = foxes)
+precis(fit1)
+```
+##b
+```{r}
+flist <- alist(
+    weight ~ dnorm(mu , sigma),
+    mu <- a + b*groupsize,
+    a ~ dnorm(0, 10),
+    b ~ dnorm(0, 10),
+    sigma ~ dunif(0, 100)
+)
+
+fit2 <- rethinking::map(flist, data = foxes)
+precis(fit2)
+```
+##c
+```{r}
+area <- data.frame(area = seq(1, 5, by = .01))
+groupsize <- data.frame(groupsize = seq(1, 10, by = .25))
+
+mu1 <- link(fit1,
+           data = area, refresh = 0, n = 1000) %>%
+  data.frame()
+
+mu2 <- link(fit2,
+           data = groupsize, refresh = 0, n = 1000) %>%
+  data.frame()
+
+mu1.bands <- cbind(
+  area = area,
+  mu1.mean = apply(mu1, 2, mean),
+  mu1.hpdi = t(apply(mu1, 2, HPDI, prob = .95))
+)
+
+mu2.bands <- cbind(
+  groupsize = groupsize,
+  mu2.mean = apply(mu2, 2, mean),
+  mu2.hpdi = t(apply(mu2, 2, HPDI, prob = .95))
+)
+
+
+
+plot1 <- ggplot(data = mu1.bands)+
+  geom_point(data = foxes, aes(x = area, y = weight), alpha = .5)+
+  geom_abline(slope = coef(fit1)[2], intercept = coef(fit1)[1], alpha = .7)+
+  geom_ribbon(data = mu1.bands, mapping=aes(x=area,ymin=`mu1.hpdi.|0.95`,ymax=`mu1.hpdi.0.95|`),alpha=0.3)+
+  theme_minimal()
+
+plot2 <- ggplot(data = mu2.bands)+
+  geom_point(data = foxes, aes(x = groupsize, y = weight), alpha = .5)+
+  geom_abline(slope = coef(fit2)[2], intercept = coef(fit2)[1], alpha = .7)+
+  geom_ribbon(data = mu2.bands, mapping=aes(x=groupsize,ymin=`mu2.hpdi.|0.95`,ymax=`mu2.hpdi.0.95|`),alpha=0.3)+
+  theme_minimal()
+
+gridExtra::grid.arrange(plot1, plot2, nrow = 1)
+
+```
+
+##d
+No. It does not seem like either variable is statistically significant in predicting weight. This is especially true of area. Zero is virtually in the center of the 89% credible interval for the slope coefficient in the regression of weight on area, and the line plotted above looks about flat. In the case of groupsize, the predictor actually is significant at the 95% level, but, again, it is possible as well that the line is flat. Because this is a fringe case, I would err on the side of caution and say no.
+
+#3a
+```{r}
+keep(foxes, sure = TRUE)
+flist <- alist(
+    weight ~ dnorm(mu , sigma),
+    mu <- a + b*area + c*groupsize,
+    a ~ dnorm(0, 10),
+    b ~ dnorm(0, 10),
+    c ~ dnorm(0, 10),
+    sigma ~ dunif(0, 100)
+)
+
+fit <- rethinking::map(flist, data = foxes)
+precis(fit)
+```
+##b
+```{r}
+group.avg <- foxes %>%
+  select(groupsize) %>%
+  summarise(groupsize = mean(groupsize))
+
+predictor.data1 <- data.frame(
+  area = seq(1, 5.1, by = .025),
+  t(group.avg)
+) %>%
+  rename(groupsize = t.group.avg.)
+
+mu1 <- link(fit, data = predictor.data1, refresh = 0)
+
+y.sim1 <- sim(fit, data=predictor.data1, n=1e4,refresh=0)
+
+predictor.data1 <- predictor.data1 %>%
+  mutate(
+    mu.mean = apply(mu1, 2, mean),
+    mu.PIlo=apply(mu1,2,PI)[1,],
+    mu.PIhi=apply(mu1,2,PI)[2,],
+    y.PIlo=apply(y.sim1,2,PI)[1,],
+    y.PIhi=apply(y.sim1,2,PI)[2,]
+  )
+
+area.avg <- foxes %>%
+  select(area) %>%
+  summarise(area = mean(area))
+
+predictor.data2 <- data.frame(
+  groupsize = seq(1, 10, by = .25),
+  t(area.avg)
+) %>%
+  rename(area = t.area.avg.)
+
+mu2 <- link(fit, data = predictor.data2, refresh = 0)
+
+y.sim2 <- sim(fit, data=predictor.data2, n=1e4,refresh=0)
+
+predictor.data2 <- predictor.data2 %>%
+  mutate(
+    mu.mean = apply(mu2, 2, mean),
+    mu.PIlo=apply(mu2,2,PI)[1,],
+    mu.PIhi=apply(mu2,2,PI)[2,],
+    y.PIlo=apply(y.sim2,2,PI)[1,],
+    y.PIhi=apply(y.sim2,2,PI)[2,]
+  )
+
+plot1 <- ggplot(data = predictor.data1) +
+  geom_line(mapping=aes(x=area,y=mu.mean))+
+  geom_ribbon(mapping=aes(x=area,ymin=mu.PIlo,ymax=mu.PIhi),fill="gray60",alpha=0.3)+
+  geom_ribbon(mapping=aes(x=area,ymin=y.PIlo,ymax=y.PIhi),fill="steelblue",alpha=0.2)+
+  labs(x = "Area", y = "Weight", caption = "Group size held constant at mean")
+
+plot2 <- ggplot(data = predictor.data2) +
+  geom_line(mapping=aes(x=groupsize,y=mu.mean))+
+  geom_ribbon(mapping=aes(x=groupsize,ymin=mu.PIlo,ymax=mu.PIhi),fill="gray60",alpha=0.3)+
+  geom_ribbon(mapping=aes(x=groupsize,ymin=y.PIlo,ymax=y.PIhi),fill="steelblue",alpha=0.2)+
+  labs(x = "Group Size", y = "Weight", caption = "Area held constant at mean")
+
+gridExtra::grid.arrange(plot1, plot2, nrow = 1)
+```
+
+##c
+Both the credible intervals and the counterfactual plots suggest that group size and area are both statistically significant in predicting weight. 
+
+##d
+We get different results in this model than we do in the one from problem two because controlling for other factors through multiple regression allows us to unbias our regression coefficients from the previous model. In other words, these results being different from those of question 2 suggest that there was significant omitted variables bias before because we were using univariate regression, which was throwing off our estimates of the true relationships between weight and age or group size.
+
+#4a
+```{r}
+rm(list = ls())
+calcium  <-read.csv("https://aloy.rbind.io/data/calcium.csv")
+```
+
+```{r}
+t.test(calcium$flow ~ calcium$treatment, conf.level=.97)
+```
+
+##b
+Likelihood:
+$$flow\: | \:treatment \sim N(\mu, \sigma)$$
+Link (B is a dummy variable for treatment group B):
+$$\hat{\mu} = \hat{\beta_{0}} + \hat{\beta_{1}}*B$$
+
+##c
+```{r}
+calcium <- calcium %>%
+  mutate(treatment = ifelse(test = treatment == "A", 1, 0))
+
+flist <- alist(
+    flow ~ dnorm(mu , sigma),
+    mu <- a + b*treatment,
+    a ~ dnorm(0, 10),
+    b ~ dnorm(0, 10),
+    sigma ~ dunif(0, 100)
+)
+
+fit <- rethinking::map(flist, data = calcium)
+
+precis(fit, prob=.97)
+```
+##d
+There is a 97% chance that the true difference in the mean of flow between the two groups is between -.02 and .26. This is almost exactly the same as the frequentist confidence interval that we calculated in part a, which is reassuring. 
+
+#5a
+$$\hat{Energy} = \beta_{0} + \beta_{1}*Red Oak + \beta_{2}*(.1)$$
+To predict the difference in energy between white pine and red oak, we use a dummy variable for red oak (such that 0 is white pine and 1 is red oak) so that we can determine the difference in the intercept coefficients of the two types of wood. We then plug in .1 for the moisture content in our model to determine the difference in energy content of the two types of wood at 10% moisture content. Something to note is that the inclusion of the slope term does not actually have an effect on our estimate of the difference in energy between white pine and red oak, because we assume parallel lines which means that the difference between the two groups is the same at any level of moisture. 
+
+##b
+$$\hat{Energy} = \beta_{0} + \beta_{1}*Red Oak + \beta_{2}*(.1) + \beta_{3}*Red Oak*(.1)$$
+Everything in this model is the same as the one above except for the introduction of an interaction term between red oak and moisture content. This allows us to test for a difference in the slope depending on the type of wood.
+
+##c
+$$Y = \beta_{0} + \beta{1}*X*D_{\leq 20} + \beta{1}*(20)*D_{>20}$$
+For this model, we want an intercept term and slope term for the regression when X is between 0 and 20. To solve for the slope, we simply run the regression with the dummy for X being greater than 20 as zero. This gives us normal regression estimates for the slope and intercept. Then, to compare the difference in exam scores for people who watch 25 hours of TV and 3 hours of TV, we plug 3 in for X to get an estimate for exam score at 3 hours of TV watching, and we add the first and third terms in the model above to get an estimate of the exam score at 25 hours of TV (because the middle term is 0 because the dummy is 0). 
+
+
+

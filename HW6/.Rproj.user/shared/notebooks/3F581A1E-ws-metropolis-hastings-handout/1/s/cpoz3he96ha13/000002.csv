@@ -1,0 +1,7 @@
+"0","challenger <- read.csv(""https://aloy.rbind.io/data/challenger.csv"")"
+"0","y <- challenger$oring"
+"0","x <- challenger$temp"
+"0","n <- 10000             # number of proposal draws"
+"0","acc <- rep(0, 2)       # keep track of no. accepted proposals for each param"
+"0","att <- rep(0, 2)       # keep track of no. attempted proposals for each param"
+"0","cand.sd <- c(0.5, 0.5) # sd of jump distributions"

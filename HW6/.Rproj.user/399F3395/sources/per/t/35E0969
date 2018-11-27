@@ -1,0 +1,29 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1540577205710.000,
+    "dirty" : false,
+    "encoding" : "",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "35E0969",
+    "lastKnownWriteTime" : 6,
+    "last_content_update" : 1540577205710,
+    "path" : null,
+    "project_path" : null,
+    "properties" : {
+        "cacheKey" : "FA17FB4E",
+        "caption" : "challenger",
+        "contentUrl" : "grid_resource/gridviewer.html?env=&obj=challenger&cache_key=FA17FB4E",
+        "displayedObservations" : 23,
+        "environment" : "",
+        "object" : "challenger",
+        "preview" : 0,
+        "totalObservations" : 23,
+        "variables" : 2
+    },
+    "relative_order" : 3,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_dataframe"
+}

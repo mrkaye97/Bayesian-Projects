@@ -1,0 +1,161 @@
+---
+title: "HW3"
+author: "Matt Kaye"
+date: "9/27/2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+rm(list = ls())
+library(tidyverse)
+library(rethinking)
+set.seed(646)
+```
+
+#4H1
+```{r, echo = FALSE}
+rm(list = ls())
+
+data(Howell1)
+df <- Howell1 %>%
+  filter(age >= 18)
+
+flist <- alist(
+    height ~ dnorm(mu , sigma),
+    mu <- a + b*weight,
+    a ~ dnorm(178, 100),
+    b ~ dnorm(0, 10),
+    sigma ~ dunif(0 , 50)
+)
+
+mod <- rethinking::map(flist, data = df)
+
+
+post.draws <- extract.samples(mod)
+
+a <- coef(mod)[1]
+b <- coef(mod)[2]
+
+mu.1 <- with(post.draws, a+b*46.95)
+mu.2 <- with(post.draws, a+b*43.72)
+mu.3 <- with(post.draws, a+b*64.78)
+mu.4 <- with(post.draws, a+b*32.59)
+mu.5 <- with(post.draws, a+b*54.63)
+
+individual <- c(1,2,3,4,5)
+weight <- c(46.95, 43.72, 64.78, 32.59, 54.63)
+expected.height <- c(mean(mu.1), mean(mu.2), mean(mu.3), mean(mu.4), mean(mu.5))
+
+hpdi.89 <- round(c(HPDI(mu.1), HPDI(mu.2), HPDI(mu.3), HPDI(mu.4), HPDI(mu.5)), digits = 3)
+
+hpdi1 <- paste(hpdi.89[1], hpdi.89[2], sep = " - ")
+hpdi2 <- paste(hpdi.89[3], hpdi.89[4], sep = " - ")
+hpdi3 <- paste(hpdi.89[5], hpdi.89[6], sep = " - ")
+hpdi4 <- paste(hpdi.89[7], hpdi.89[8], sep = " - ")
+hpdi5 <- paste(hpdi.89[9], hpdi.89[10], sep = " - ")
+
+hpdi.89 <- c(hpdi1, hpdi2, hpdi3, hpdi4, hpdi5)
+
+tab <- data.frame(individual, weight, expected.height, hpdi.89)
+tab
+```
+
+#4H2
+
+###a
+```{r}
+rm(list = ls())
+data("Howell1")
+df <- Howell1 %>%
+  filter(age < 18)
+
+
+flist <- alist(
+    height ~ dnorm(mu , sigma),
+    mu <- a + b*weight,
+    a ~ dnorm(100, 50),
+    b ~ dnorm(0, 10),
+    sigma ~ dunif(0, 50)
+)
+
+mod <- rethinking::map(flist, data = df)
+precis(mod)
+```
+The coefficients produced by this model are above. The intercept coefficient a is not particularly relevant, but implies that a weightless child is 58.27 units of height tall, on average. The slope coefficient b means that for every unit increase in weight, we expect a 2.72 unit increase in height, on average. For every 10 units increase in weight, the model predicts that a child gets 27.2 units of height taller, on average. The sigma coefficient is the expected standard deviation of our height estimates.
+
+I chose the values for my hyperparameters in a way so that they made sense in the context of the problem. I figured that the height of a child is, on average, smaller than the height of an adult at all levels of weight, so I decreased the mean of the distribution of a to 100cm. I also assumed that the relationships between height and weight among children relative ot adults would be about the same, so I left the parameters for the distribution of b the same. 
+
+###b
+```{r}
+weights <- data.frame(weight = seq(4, 45, by = 1))
+mu <- link(mod,
+           data = weights, refresh = 0) %>%
+  data.frame()
+
+mu.bands <- cbind(
+  mu.mean = apply(mu, 2, mean),
+  mu.hpdi = t(apply(mu, 2, HPDI))
+)
+
+
+
+ggplot(data=df)+
+  geom_point(mapping=aes(x=weight,y=height),alpha=0.5)+
+  geom_abline(intercept=coef(mod)[1],slope=coef(mod)[2])+
+  geom_ribbon(data = mu.bands, mapping=aes(x=weight,ymin=`mu.hpdi.|0.89`,ymax=`mu.hpdi.0.89|`),alpha=0.3)+
+  labs(x="Weight",y="Height")+
+  theme_minimal()
+```
+
+###c
+
+I think that the linearity assumption in the data is a little bit questionable. It seems like a log or quadratic model might fit a little bit better here becuase of the apparent curvature in the data, and might end up produced results that fit the data better. Additionally, it is possible that the relationship between height and weight is not the same for the adult group as the child group, which means that we might want to adjust the expected value of our b parameter.
+
+#4H3
+```{r}
+rm(list = ls())
+data("Howell1")
+all.data <- Howell1
+
+flist <- alist(
+    height ~ dnorm(mu , sigma),
+    mu <- a + b*log(weight),
+    a ~ dnorm(178, 100),
+    b ~ dnorm(0, 100),
+    sigma ~ dunif(0 , 50)
+)
+
+mod <- rethinking::map(flist, data = all.data)
+precis(mod)
+```
+These results look better than the ones from the previous part where we used a linear model, and we can see in the plot below that the log model seems to fit the data significantly better. The negative a value is not particularly important, since we do not expect to have any weightless babies. The b value means that for every one percent increase in weight, we expect a .4707 unit increase in height. Again, the sigma value is the expected standard deviation of our height predictions.
+
+###b
+```{r}
+weights <- data.frame(weight = seq(4, 63, by = 1))
+mu <- link(mod,
+           data = weights, refresh = 0) %>%
+  data.frame()
+
+mu.bands <- cbind(
+  weight = weights,
+  mu.mean = apply(mu, 2, mean),
+  mu.hpdi = t(apply(mu, 2, HPDI, p = .97))
+)
+
+ggplot(data=mu.bands)+
+  geom_point(data = all.data, mapping=aes(x=weight,y=height),alpha=0.5)+
+  geom_ribbon(mapping=aes(x=weight,ymin=`mu.hpdi.|0.97`,ymax=`mu.hpdi.0.97|`, color = 'red'),alpha=0.3)+
+  labs(x="Weight",y="Height") +
+  theme_minimal()
+```
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,29 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1540754027840.000,
+    "dirty" : false,
+    "encoding" : "",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "FEC46573",
+    "lastKnownWriteTime" : 8389754659302220320,
+    "last_content_update" : 1540754027840,
+    "path" : null,
+    "project_path" : null,
+    "properties" : {
+        "cacheKey" : "5480B451",
+        "caption" : "mu.bands",
+        "contentUrl" : "grid_resource/gridviewer.html?env=&obj=mu.bands&cache_key=5480B451",
+        "displayedObservations" : "1000",
+        "environment" : "",
+        "object" : "mu.bands",
+        "preview" : "0",
+        "totalObservations" : "1000",
+        "variables" : "5"
+    },
+    "relative_order" : 4,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_dataframe"
+}

@@ -1,0 +1,4 @@
+"0","sum(dnorm(d2$height, mu, sigma, log=TRUE))
+"
+"2","Error in dnorm(d2$height, mu, sigma, log = TRUE) : object 'mu' not found
+"

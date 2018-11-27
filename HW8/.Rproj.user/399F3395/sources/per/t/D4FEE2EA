@@ -1,0 +1,29 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1542049018834.000,
+    "dirty" : false,
+    "encoding" : "",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "D4FEE2EA",
+    "lastKnownWriteTime" : 4797057312,
+    "last_content_update" : 1542049018834,
+    "path" : null,
+    "project_path" : null,
+    "properties" : {
+        "cacheKey" : "AF6C73CD",
+        "caption" : "rides",
+        "contentUrl" : "grid_resource/gridviewer.html?env=&obj=rides&cache_key=AF6C73CD",
+        "displayedObservations" : 8978,
+        "environment" : "",
+        "object" : "rides",
+        "preview" : 0,
+        "totalObservations" : 8978,
+        "variables" : 7
+    },
+    "relative_order" : 4,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_dataframe"
+}

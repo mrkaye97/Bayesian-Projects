@@ -1,0 +1,5 @@
+"0","df <- fread(""/users/matt/google drive/carleton/junior year/econ395/raw_data/state_level.csv"", skip = 7, drop = c(1, 8:26)) %>%
+  rename(Demographic.Value = ""Demographic Value"", N.Size = ""N Sizw"")
+"
+"2","Error: Unknown column `N Sizw` 
+"

@@ -1,0 +1,9 @@
+"0","plm(Value ~ N.Size, data = race, model = ""within"", index = c(""Time"", ""Race""))
+"
+"2","duplicate couples (id-time) in resulting pdata.frame
+ to find out which, use e.g. table(index(your_pdataframe), useNA = ""ifany"")"
+"2","duplicate couples (id-time)
+"
+"2","Error in pdim.default(index[[1]], index[[2]]) : 
+  duplicate couples (id-time)
+"

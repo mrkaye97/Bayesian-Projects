@@ -1,0 +1,2 @@
+"0","draws <- matrix(NA, nrow = n, ncol = 2)"
+"0","colnames(draws) <- c(""alpha"", ""beta"")"

@@ -1,0 +1,167 @@
+---
+title: "HW8"
+author: "Matt Kaye"
+date: "11/7/2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+rm(list = ls())
+library(tidyverse)
+library(rethinking)
+library(MASS)
+```
+
+#Problem 1
+
+##a
+
+$$L_{i} \sim Binomial(1,p_{i})$$
+$$logit(p_{i}) = \beta_{0} + \beta_{1}*Temperature_{i}$$
+
+##b
+```{r, fig.height = 2}
+load("stan_fit_ps8q1.Rdata")
+output <- precis(fit.unstd)@output
+
+knitr::kable(output, format = 'markdown', digits = 3, align = 'c')
+plot(fit.unstd)
+
+odds.change <- exp(coef(fit.unstd))
+```
+
+We can tell that the chains converged to a stationary distribution by looking at the trace plots. Since both chains look like random walks with no overall trend and both chains in each pair are centered around the same value, we can say that they converged to a stationary distribution.
+
+##c
+The $\beta_{1}$ value of -.184 means that we expect a change in the odds ratio of $e^{-.184} = .832$ for a unit increase in temperature. In other words, for a unit increase in temperature, we expect the odds ratio of an o-ring failure to change by a multiplicative factor of .832.
+
+
+##d
+```{r}
+p.preds <- link(fit.unstd, data = list(temp = 31), refresh = 0)
+
+pred.bands <- cbind(
+  pred.mean = apply(p.preds, 2, mean),    
+  lower.97 = apply(p.preds, 2, PI, .97)[1,],
+  upper.97 = apply(p.preds, 2, PI, .97)[2,],
+  temp = 31
+) %>%
+  data.frame()%>%
+  rownames_to_column() %>%
+  dplyr::select(2:5)
+
+knitr::kable(pred.bands, format = 'markdown', align = 'c', digits = 3)
+```
+
+##e
+We have a little less than 800 effective draws from both chains in this mode. This is a little bit too small to be happy with, because we would prefer a number in the thousands. A low number of effective draws means that our observations in the chain are correlated, which is not in line with our assumption of a random walk. Thus, we ideally want closer to 3000 effective draws, which is the total number of iterations in our chain after the burn-in period.
+
+##f
+
+```{r}
+output <- precis(fit.std)@output
+
+knitr::kable(output, format = 'markdown', digits = 3, align = 'c')
+```
+The effective number of independent draws we have from sampling each parameter's posterior distribution went way up after standardizing the temperature variable Now, we have 2300 effective draws for $\beta_{1}$ and 3400 for $\beta_{0}$, which are both significantly higher than the number of effective draws that we had before we standardized.
+
+#Problem 2
+
+A few notes on the data:
+\begin{itemize}
+\item P = 0 is a large pirating eagle. P = 1 is a small pirating eagle.
+\item A = 0 is an adult pirating eagle. A = 1 is an immature pirating eagle.
+\item V = 0 is a large victim eagle. V = 1 is a small victim eagle.
+\end{itemize}
+
+##a
+```{r, fig.height = 4}
+rm(list = ls())
+load("stan_fit_ps8q2.Rdata")
+eagles <- eagles %>%
+  mutate(P = ifelse(P == "S", 1, 0),
+         A = ifelse(A == "I", 1, 0),
+         V = ifelse(V == "S", 1, 0))
+
+output <- precis(no.interaction)@output
+
+knitr::kable(output, format = 'markdown', digits = 3, align = 'c')
+
+plot(no.interaction)
+```
+We can tell that our chains converged to a stationary distribution by looking at their trace plots. Since all of the chains look like random walks with no overall trend and both chains in each pair are centered around the same value, we can say that they converged to a stationary distribution.
+
+##b
+```{r}
+odds.change <- exp(coef(no.interaction))
+```
+The coefficient on bp of -4.632 means that we expect a $`r round(odds.change[2], digits = 3)`$ multiplicative change in the odds of success for a small eagle as opposed to a large one. The coefficient on ba of -1.131 means that we expect a $`r round(odds.change[3], digits = 3)`$ multiplicative change in the odds of success for an immature eagle as opposed to an adult one. Finally, the coefficient on bv of 5.028 means that we expect a $`r round(odds.change[4], digits = 3)`$ multiplicative change in the odds of success for an eagle if its victim is a small eagle as opposed to an large one.
+
+
+##c
+```{r}
+eagles.df.link <- link(no.interaction , data = eagles, refresh = 0)
+eagles.df.y <- sim(no.interaction , data = eagles, refresh = 0)
+
+temp <- eagles %>%
+  mutate(perm = paste(P,A,V, sep = ", "),
+         obs.y = y) %>%
+  dplyr::select(6, 7)
+
+pred.eagles <- eagles %>%
+  mutate(
+    prob = apply(eagles.df.link, 2, mean),
+    prob.lo = apply(eagles.df.link, 2, PI, .89)[1,],
+    prob.hi = apply(eagles.df.link, 2, PI, .89)[2,],
+    y = apply(eagles.df.y, 2, mean),
+    y.lo = apply(eagles.df.y, 2, PI, .89)[1,],
+    y.hi = apply(eagles.df.y, 2, PI, .89)[2,]
+  ) %>%
+  mutate(perm = paste(P,A,V, sep = ", ")) %>%
+  left_join(temp, by = "perm")
+
+
+ggplot(data = pred.eagles, aes(x = perm)) +
+  geom_linerange(aes(ymin = prob.lo, ymax = prob.hi), position = position_dodge(width = 1)) +
+  geom_point(aes(y = prob), position = position_dodge(width = 1), shape = 1, alpha = .5, size = 3) +
+  geom_point(aes(y = obs.y/n), position = position_dodge(width = 1), shape = 2, color = 'red', fill = 'red', alpha = .5, size = 3) +
+  labs(x = "Permutation",
+       y = "Pr(Success)",
+       caption = "(0, 0, 0) corresponds to (P = 0, A = 0, V = 0). triangles are observed values. circles are predictions",
+       title = "Probabilities")
+
+ggplot(data = pred.eagles, aes(x = perm)) +
+  geom_linerange(aes(ymin = y.lo, ymax = y.hi), position = position_dodge(width = 1)) +
+  geom_point(aes(y = y), position = position_dodge(width = 1), shape = 1, alpha = .5, size = 3) +
+  geom_point(aes(y = obs.y, x = perm), position = position_dodge(width = 1), shape = 2, color = 'red', fill = "blue", alpha = .5, size = 3) +
+  labs(x = "Permutation",
+       y = "Number of Successes",
+       caption = "(0, 0, 0) corresponds to (P = 0, A = 0, V = 0). triangles are observed values. circles are predictions",
+       title = "Counts")
+
+```
+
+
+##d
+```{r}
+output <- precis(interaction)@output
+
+knitr::kable(output, format = 'markdown', align = 'c', digits = 3)
+plot(interaction)
+```
+In this model, we have added an interaction term between the pirate's size and age. Since the 89% credible interval for this interaction term does not contain zero, we can reject the null hypothesis and assert that there is a statistically significant interaction between pirate size and age in predicting the probability of a successful pirating attempt. As before, we know that our Markov chains converged to stationary distributions because of the trace plots. Since all of the chains look like random walks with no overall trend and both chains in each pair are centered around the same value, we can say that they converged to a stationary distribution.
+
+##e
+```{r}
+knitr::kable(compare(no.interaction, interaction)@output, format = 'markdown', align = 'c', digits = 3)
+```
+The WAIC values of the model with the interaction term and the model without the interaction term are very similar. We slightly prefer the model with the interaction term, as its WAIC values is about 4 points smaller than the model without the interaction term and it gets a heavier weight, but the models seem very similar in terms of their out-of-sample performance as measured by WAIC.
+
+
+
+
+
+
+
+

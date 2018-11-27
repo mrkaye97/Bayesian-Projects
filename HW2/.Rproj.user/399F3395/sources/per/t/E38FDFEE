@@ -1,0 +1,29 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1537379776922.000,
+    "dirty" : false,
+    "encoding" : "",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "E38FDFEE",
+    "lastKnownWriteTime" : 4462589264,
+    "last_content_update" : 1537379776922,
+    "path" : null,
+    "project_path" : null,
+    "properties" : {
+        "cacheKey" : "958D1CB6",
+        "caption" : "births",
+        "contentUrl" : "grid_resource/gridviewer.html?env=&obj=births&cache_key=958D1CB6",
+        "displayedObservations" : 39,
+        "environment" : "",
+        "object" : "births",
+        "preview" : 0,
+        "totalObservations" : 39,
+        "variables" : 2
+    },
+    "relative_order" : 4,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_dataframe"
+}

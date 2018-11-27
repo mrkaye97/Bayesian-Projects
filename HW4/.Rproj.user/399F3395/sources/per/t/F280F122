@@ -1,0 +1,29 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1538962575873.000,
+    "dirty" : false,
+    "encoding" : "",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "F280F122",
+    "lastKnownWriteTime" : 6,
+    "last_content_update" : 1538962575873,
+    "path" : null,
+    "project_path" : null,
+    "properties" : {
+        "cacheKey" : "3CE5A6A0",
+        "caption" : "log.df",
+        "contentUrl" : "grid_resource/gridviewer.html?env=&obj=log.df&cache_key=3CE5A6A0",
+        "displayedObservations" : "30",
+        "environment" : "",
+        "object" : "log.df",
+        "preview" : "0",
+        "totalObservations" : "30",
+        "variables" : "6"
+    },
+    "relative_order" : 3,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_dataframe"
+}

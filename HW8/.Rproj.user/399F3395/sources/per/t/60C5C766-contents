@@ -1,0 +1,111 @@
+---
+title: "comps_eda"
+author: "Matt Kaye"
+date: "11/8/2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+rm(list = ls())
+library(tidyverse)
+library(data.table)
+library(gridExtra)
+library(grid)
+library(ggplot2)
+library(ggmap)
+library(maps)
+library(mapdata)
+```
+
+```{r ridership}
+tot.rides <- fread("/users/matt/google drive/carleton/junior year/econ395/raw_data/transit_utrips.csv", na.strings = "") %>%
+  gather(time, rides, JAN02:AUG18) %>%
+  mutate(month = substr(time, 1, 3),
+         year = paste("20", substr(time, 4, 5), sep = ""),
+         rides = as.numeric(gsub(pattern = ",", replacement = "", x = rides))) %>%
+  group_by(year, UZA, `UZA Name`, Modes, TOS, `5 digit NTD ID`) %>%
+  summarise(rides = sum(rides)) %>%
+  ungroup()
+
+rides <- tot.rides %>%
+  na.omit() %>%
+  filter(Modes %in% c("HR", "MB", "SR", "LR"))
+
+
+df <- fread("/users/matt/google drive/carleton/junior year/econ395/raw_data/population.csv", na.strings = "") %>%
+  dplyr::select(7,9:11) %>%
+  unique() %>%
+  na.omit() %>%
+  left_join(rides, by = "UZA Name") %>%
+  dplyr::select(1:5, 7,8,10) %>%
+  na.omit() %>%
+  rename(Metro = 1, Area_sqm = 4, Rides = 8) %>%
+  mutate(Modes = as.factor(Modes), 
+         Metro = as.factor(Metro),
+         Population = as.numeric(gsub(pattern = ",", replacement = "", x = Population)),
+         Density = as.numeric(gsub(pattern = ",", replacement = "", x = Density)),
+         Area_sqm = as.numeric(gsub(pattern = ",", replacement = "", x = Area_sqm))) %>%
+  group_by(Metro, Modes, year) %>%
+  summarize(Rides = sum(Rides), Population = mean(Population), Density = min(Density), Area_sqm = min(Area_sqm)) %>%
+  ungroup() %>%
+  mutate(Rides.perCap = Rides / Population,
+         Modes = recode(Modes, HR = "Heavy Rail", MB = "Bus", SR = "Streetcar", LR = "Light Rail"))
+
+df.2017 <- df %>%
+  filter(year == "2017")
+
+ggplot(data = df.2017, aes(x = Density, y = Rides.perCap))+
+  geom_point(aes(color = Modes, size = Population), alpha = .5)+
+  labs(x = "Population Density", y = "Total Unlinked Rides Per Capita")
+
+ggplot(data = df.2017, aes(x = Density, y = Rides.perCap))+
+  geom_point(aes(color = Modes, size = Population), alpha = .5)+
+  scale_x_log10()+
+  scale_y_log10()+
+  labs(x = "Population Density", y = "Total Unlinked Rides Per Capita")
+
+```
+
+```{r life satisfaction}
+state <- fread("/users/matt/google drive/carleton/junior year/econ395/raw_data/state_level.csv", skip = 7, select = c(2:7), col.names = c("Geography", "Year", "Demographic", "Subcategory", "Value", "N")) %>%
+  mutate(N = as.numeric(gsub(pattern = ",", replacement = "", x = N)))
+
+totals <- state %>%
+  filter(Demographic == "Aggregate") %>%
+  mutate(region = tolower(Geography))
+
+usa <- totals %>%
+  filter(Geography == "United States")
+usa.map <- map_data("usa")
+
+state.map.2016 <- map_data("state") %>%
+  left_join(totals, by = "region") %>%
+  select(1:5, 8, 11,12) %>%
+  filter(Year == 2016) %>%
+  mutate(std.ls = (Value - mean(Value))/sd(Value))
+
+ggplot(data = state.map.2016) + 
+  geom_polygon(aes(x = long, y = lat, fill = Value, group = group), color = "white") + 
+  coord_fixed(1.3)+
+  scale_fill_gradient(low = "navy", high = "aquamarine3")+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"), axis.line.y = element_blank(), axis.line.x = element_blank(), axis.title = element_blank(), axis.ticks = element_blank(), axis.text = element_blank())
+
+new.england <- state.map.2016 %>%
+  filter(region %in% c("vermont", "new hampshire", "maine", "connecticut", "rhode island", "massachusetts"))
+
+ggplot(data = new.england) + 
+  geom_polygon(aes(x = long, y = lat, fill = Value, group = group), color = "white") + 
+  coord_fixed(1.3)+
+  scale_fill_gradient(low = "navy", high = "aquamarine3")+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"), axis.line.y = element_blank(), axis.line.x = element_blank(), axis.title = element_blank(), axis.ticks = element_blank(), axis.text = element_blank())
+
+
+```
+```{r}
+
+```
+
+$$LS_{i,t} = \beta_{0} + \beta_{1}*TR_{i,t} + C_{i} + P_{i,t} + \sum_{i = 1}^{i=n} \sum_{t=1}^{m}\beta_{i,t}*Z_{i,t} + \epsilon_{i,t}$$

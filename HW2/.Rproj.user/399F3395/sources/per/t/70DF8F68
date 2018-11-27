@@ -1,0 +1,29 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1537395666368.000,
+    "dirty" : false,
+    "encoding" : "",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "70DF8F68",
+    "lastKnownWriteTime" : 4718877104,
+    "last_content_update" : 1537395666368,
+    "path" : null,
+    "project_path" : null,
+    "properties" : {
+        "cacheKey" : "B627C549",
+        "caption" : "firstborns",
+        "contentUrl" : "grid_resource/gridviewer.html?env=&obj=firstborns&cache_key=B627C549",
+        "displayedObservations" : "10000",
+        "environment" : "",
+        "object" : "firstborns",
+        "preview" : "0",
+        "totalObservations" : "10000",
+        "variables" : "5"
+    },
+    "relative_order" : 5,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_dataframe"
+}

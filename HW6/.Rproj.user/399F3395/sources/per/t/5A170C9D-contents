@@ -1,0 +1,157 @@
+---
+title: "The Metropolis-Hasting Algorithm"
+author: "Math 315, Fall 2018"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls())
+```
+
+## Problem overview
+
+(This part taken from Example 1.13 in Robert and Casella, 2004.) In 1986, the space shuttle Challenger exploded during takeoff, killing the seven astronauts aboard. The explosion was a result of an O-ring failure, a splitting of a rubber ring that seals parts of the ship together. The accident was believed to be caused by the unusually cold weather ($31^\circ$F) at the time of the launch, as there is reason to believe that the O-ring failure probabilities increase as the temperature decreases.
+
+Data collected about O-rings on other shuttle launches include: temperature at flight time (in $^\circ$F) and failure/success (0/1) of the O-ring for the flight at the given temperature. The temperatures range from $53^\circ$F to $81^\circ$F, with the majority of O-ring failures at the lower temperatures. Notice that the temperature at the Challenger launch was significantly lower those studied in the given data.
+
+
+### 1. The model
+
+For a binary response, $Y$, with a predictor variable, $X$, logistic regression is a standard
+model (one we will explore soon). Specifically, $Y| X = x$ is modeled as a Bernoulli random variable, with success probability $p(x)$, where $p(x)$ satisfies
+
+$$\log \left( \frac{p(x)}{1-p(x)} \right) = \alpha + \beta x \Longleftrightarrow p(x) = \frac{e^{\alpha + \beta x}}{1+e^{\alpha + \beta x}}$$
+
+In this situation, we are interested in obtaining the posterior of $\alpha$ and $beta$. You can show (and should be able to) that the likelihood (assuming observations are exchangeable) is given by
+
+$$f({\bf y} | \alpha, \beta) = \prod_{i=1}^n \left( \frac{e^{\alpha + \beta x}}{1+e^{\alpha + \beta x}} \right)^{y_i} \left( \frac{e^{\alpha + \beta x}}{1+e^{\alpha + \beta x}} \right)^{1-y_i}$$
+
+We consider diffuse priors for letting $\alpha,\ \beta \sim \mathcal{N}(0, 10^2)$.
+
+
+**Task 1.** Your first task is to write an R function implementing the log-posterior density. To do this, fill in the missing pieces in the below code chunk.
+
+```{r}
+log_posterior <- function(params, y, x){
+  a <- params[1]
+  b <- params[2]
+  prob  <- exp(a+b*x) / (1 + exp(a+b*x))
+  like  <- sum(dbinom(1, size = 1, prob = prob, log = TRUE))
+  prior <- sum(dnorm(c(a, b), mean = 0, sd = 25, log = TRUE))
+  posterior <- prior + like
+  return(posterior)
+}
+```
+
+
+### 2. The jump distribution(s)
+
+A reasonable jump distribution in this setting is given by assuming independence and using a normal distribution centered at the current value of $\alpha$ and $\beta$.
+
+
+### 3. The acceptance probability
+
+**Task 2.** Show (with pencil and paper) that the acceptance probability, $r$, simplifies to $r = p(\alpha^{*}, \beta^{*} | {\bf y}) / p(\alpha^{(i)}, \beta^{(i)} | {\bf y})$.
+
+\vspace{1in}
+
+### 4. Putting everything together
+
+Now that you have thought about the posterior distribution, the jump distribution, and the acceptance probability, it's time to put everything together to implement the Metropolis-Hastings algorithm. 
+
+
+**Task 3.** First you need to organize the data, the number of draws, the candidate standard errors, and bookkeeping variables for the acceptance rate. Read through the below code chunk, be sure to understand what each line is doing.
+
+Note: for now, we'll assume that 0.5 is a reasonable standard deviation for the jump distributions.
+
+```{r}
+challenger <- read.csv("https://aloy.rbind.io/data/challenger.csv")
+y <- challenger$oring
+x <- challenger$temp
+n <- 10000             # number of proposal draws
+acc <- rep(0, 2)       # keep track of no. accepted proposals for each param
+att <- rep(0, 2)       # keep track of no. attempted proposals for each param
+cand.sd <- c(0.5, 0.5) # sd of jump distributions
+```
+
+
+**Task 4.** Create a matrix called `draws` to store the `alpha` and `beta` draws using the below code using the code below.
+
+```{r}
+draws <- matrix(NA, nrow = n, ncol = 2)
+colnames(draws) <- c("alpha", "beta")
+```
+
+
+**Task 5.** Fill in the first row of `draws` with initial values of `alpha` and `beta`. To choose random values use `rnorm(2)`. We'll investigate later whether these are reasonable values.
+
+```{r}
+draws[1,] <- rnorm(2)
+```
+
+**Task 6.** fill in the missing pieces in the below code chunk to complete the Metropolis-Hastings code. Be sure to understand what each piece of code is doing, even if it doesn't contain a blank.
+
+```{r}
+for (i in 2:n) {
+  current <- draws[i-1,]
+  
+  for(j in 1:2){
+    att[j] <- att[j] + 1 # increasing attempts by 1
+    
+    # Draw a candidate for parameter j
+    proposed <- current
+    proposed[j] <- rnorm(1, mean = current[j], sd = cand.sd[j])
+  
+    # Calculate log ratio of posterior densities
+    logr <- log_posterior(proposed, y, x) - log_posterior(current, y, x)
+    
+    # Calculate acceptance probability
+    R <- exp(logr)
+    
+    # Acccept or reject
+    if(R > runif(1)) {
+      current <- proposed 
+      acc[j] <- acc[j] + 1
+    }
+    
+  }
+  
+  # store the beta draws from this step
+  draws[i, ] <- current
+}
+```
+
+**Task 7.** Check the acceptance rate by running the below code. If it is too small, decrease the appropriate `cand.sd` and rerun your code. If it's too large, increase the appropriate `cand.sd`.
+
+```{r}
+acc / att
+```
+
+### Exploring your Markov chains
+
+Currently, your draws are stored as a matrix, which was easier above, but for exploration data frames are often preferred (especially if you are using `ggplot2`). Run the below code to load packages for exploration, convert `draws` to a data frame, and add a column indicating the step number.
+
+```{r  message=FALSE, warning=FALSE}
+library(dplyr)
+library(ggplot2)
+draws <- as.data.frame(draws) %>%
+  mutate(step = 1:n())
+```
+
+
+**Task 8.** Create histograms of each posterior distribution.
+
+
+**Task 9.** Calculate the posterior mean of each parameter and report a 97% credible intervals using the percentile method.
+
+**Task 10.** Trace plots show the evolution of your Markov chain over time. Create a trace plot for each variable by plotting the draws on the y-axis and the step on the x-axis.
+
+Based on your trace plot consider the following questions:
+
+- Do you think the random starting values were good starting values?
+- Do you think that your Markov chains have reached their stationary distributions?
+- Should your throw out the first N draws before conducting posterior inference?
+

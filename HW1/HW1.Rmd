@@ -1,0 +1,108 @@
+---
+title: "HW1"
+author: "Matt Kaye"
+date: "9/12/2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE, message=FALSE, warning=FALSE, }
+knitr::opts_chunk$set(echo = TRUE)
+
+rm(list = ls())
+library(tidyverse)
+```
+#2H1
+```{r}
+prior <- c(.5, .5)
+lik <- c(.1, .2)
+
+posterior <- lik*prior / sum(lik*prior)
+
+prob <- sum(posterior * lik)
+```
+The probability of the next baby birth being twins is $`r round(prob, digits = 3)`$.
+
+#2H2
+```{r}
+temp <- posterior[1]
+```
+The probability of the panda that we have being from species A is $p(A|twins)$ which is equal to the posterior probability that we calculated earlier: $`r round(temp, digits = 3)`$.
+
+#2H3
+
+We use Bayes rule here to determine the posterior probability that the panda is species A. To do this, we recondition our original result from 2H1, using the posterior from that problem as our prior and making the likelihood the probabilities of not having twins.
+```{r}
+newLik <- c(.9, .8)
+p <- posterior*newLik / sum(posterior*newLik)
+```
+This gives a result of $`r p[1]`$ as the probability that this panda is species A.
+
+#2H4
+```{r}
+a <- .8
+b <- .65
+
+vetLik <- c(a, 1-b)
+vetPrior <- c(.5, .5)
+
+vetPost <- vetPrior * vetLik / sum(vetPrior * vetLik)
+```
+To find the posterior probability that the panda is species A, we use Bayes' rule. This gives a posterior probability of $`r round(vetPost[1], digits = 3)`$. This answer makes sense because it not only accounts for a false positive result for species A, but also a false negative for B. 
+
+```{r}
+p <- (p * vetLik) / sum(p * vetLik)
+```
+When we factor in our prior information, our confidence in the test diminishes further. In this case, the new posterior probability of the panda being of species A is $`r p[1]`$
+
+#5
+a)
+```{r}
+mu <- c(20, 30, 40, 50, 60, 70)
+prior <- c(.1, .15, .25, .25, .15, .1)
+snowfall <- c(38.6, 42.4, 57.5, 40.5, 51.7, 67.1, 33.4, 60.9, 64.1, 40.1, 40.7, 6.4)
+
+snow <- data_frame(mu, prior)
+snow
+```
+b)
+```{r}
+yBar <- mean(snowfall)
+yBar
+```
+c) HANDWRITTEN
+
+
+
+d)
+```{r}
+snow <- snow %>%
+  mutate(likelihood = dnorm(mu, yBar, 10))
+
+snow
+```
+
+e)
+```{r}
+snow <- snow %>%
+  mutate(posterior = prior * likelihood / sum(prior * likelihood))
+
+snow
+```
+
+f)
+```{r, echo = FALSE}
+suppressMessages(
+ggplot(snow, aes(x=mu)) +
+  xlab("mu")+
+  ylab("probability")+
+  geom_point(aes(y = prior, color = 'aquamarine3'), na.rm = TRUE) +
+  geom_smooth(aes(y = prior, x = mu), method = "loess", color = 'coral1', na.rm = TRUE) +
+  geom_point(aes(y = posterior, color = 'deepskyblue3'), na.rm = TRUE) +
+  geom_smooth(aes(y = posterior, x = mu), method = "loess", color = 'deepskyblue3', na.rm = TRUE) +
+  geom_point(aes(y = likelihood, color = 'coral1'), na.rm = TRUE) +
+  geom_smooth(aes(y = likelihood, x = mu), method = "loess", color = 'aquamarine3', na.rm = TRUE) + 
+  scale_color_discrete(name = "distribution:", labels = c("prior", "likelihood", "posterior"))
+)
+
+```
+
